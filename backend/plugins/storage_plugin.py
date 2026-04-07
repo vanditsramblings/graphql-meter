@@ -1,0 +1,199 @@
+"""Storage plugin — SQLite initialization, migrations, thread-local connections, WAL mode."""
+
+import sqlite3
+import threading
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional, List, Dict, Any
+
+from fastapi import HTTPException
+
+from backend.core.plugin_base import PluginBase
+from backend.config import get_settings
+
+_local = threading.local()
+_db_path: Optional[str] = None
+
+
+def get_db() -> sqlite3.Connection:
+    """Get a thread-local SQLite connection."""
+    if not hasattr(_local, "conn") or _local.conn is None:
+        _local.conn = sqlite3.connect(_db_path, check_same_thread=False)
+        _local.conn.row_factory = sqlite3.Row
+        _local.conn.execute("PRAGMA journal_mode=WAL")
+        _local.conn.execute("PRAGMA foreign_keys=ON")
+        _local.conn.execute("PRAGMA busy_timeout=5000")
+    return _local.conn
+
+
+def _init_tables(conn: sqlite3.Connection):
+    """Create all tables if they don't exist."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS metadata (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS test_configs (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            schema_text TEXT,
+            config_json TEXT,
+            created_by TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS test_runs (
+            id TEXT PRIMARY KEY,
+            config_id TEXT REFERENCES test_configs(id),
+            name TEXT,
+            status TEXT CHECK(status IN ('pending','running','completed','failed','stopped')),
+            started_at TEXT,
+            completed_at TEXT,
+            user_count INTEGER,
+            ramp_up_sec INTEGER,
+            duration_sec INTEGER,
+            host TEXT,
+            platform TEXT,
+            config_snapshot TEXT,
+            summary_json TEXT,
+            error_log TEXT,
+            engine TEXT,
+            debug_mode INTEGER DEFAULT 0,
+            cleanup_on_stop INTEGER DEFAULT 0,
+            notes TEXT,
+            tags TEXT,
+            environment_id TEXT,
+            created_by TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS operation_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id TEXT REFERENCES test_runs(id),
+            operation_name TEXT,
+            operation_type TEXT,
+            request_count INTEGER,
+            failure_count INTEGER,
+            avg_response_ms REAL,
+            min_response_ms REAL,
+            max_response_ms REAL,
+            p50_response_ms REAL,
+            p90_response_ms REAL,
+            p95_response_ms REAL,
+            p99_response_ms REAL,
+            tps_actual REAL,
+            tps_target REAL,
+            stats_json TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS cleanup_jobs (
+            id TEXT PRIMARY KEY,
+            run_id TEXT,
+            status TEXT CHECK(status IN ('pending','running','completed','failed')),
+            total_ops INTEGER,
+            completed_ops INTEGER DEFAULT 0,
+            failed_ops INTEGER DEFAULT 0,
+            error_details TEXT,
+            created_at TEXT,
+            completed_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS environments (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            platform TEXT,
+            base_url TEXT,
+            graphql_path TEXT DEFAULT '/graphql',
+            cert_path TEXT,
+            key_path TEXT,
+            notes TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS auth_providers (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            auth_type TEXT NOT NULL CHECK(auth_type IN ('bearer_token','basic','api_key','oauth2_client_credentials','oauth2_password','jwt_custom')),
+            config_encrypted TEXT NOT NULL,
+            description TEXT,
+            created_by TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        );
+    """)
+    conn.commit()
+
+
+def _mark_orphan_runs(conn: sqlite3.Connection):
+    """Mark any stale running/pending runs as failed on startup."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "UPDATE test_runs SET status = 'failed', completed_at = ?, error_log = 'Server restarted — run orphaned' "
+        "WHERE status IN ('running', 'pending')",
+        (now,),
+    )
+    conn.commit()
+
+
+class StoragePlugin(PluginBase):
+    @property
+    def name(self) -> str:
+        return "storage"
+
+    @property
+    def description(self) -> str:
+        return "SQLite storage — init, migrations, thread-local connections, WAL mode"
+
+    def __init__(self):
+        global _db_path
+        settings = get_settings()
+        _db_path = settings.DB_PATH
+
+        # Ensure directory exists
+        Path(_db_path).parent.mkdir(parents=True, exist_ok=True)
+
+        # Initialize database
+        conn = sqlite3.connect(_db_path)
+        conn.execute("PRAGMA journal_mode=WAL")
+        _init_tables(conn)
+        _mark_orphan_runs(conn)
+        conn.close()
+
+        super().__init__()
+
+    def _register_routes(self):
+        @self.router.get("/status")
+        async def storage_status():
+            db = get_db()
+            row = db.execute("SELECT COUNT(*) as cnt FROM test_configs").fetchone()
+            runs_row = db.execute("SELECT COUNT(*) as cnt FROM test_runs").fetchone()
+            return {
+                "status": "ok",
+                "db_path": _db_path,
+                "test_configs": row["cnt"],
+                "test_runs": runs_row["cnt"],
+            }
+
+        @self.router.get("/metadata/{key}")
+        async def get_metadata(key: str):
+            db = get_db()
+            row = db.execute("SELECT value, updated_at FROM metadata WHERE key = ?", (key,)).fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail=f"Key '{key}' not found")
+            return {"key": key, "value": row["value"], "updated_at": row["updated_at"]}
+
+        @self.router.put("/metadata/{key}")
+        async def set_metadata(key: str, body: dict):
+            db = get_db()
+            now = datetime.now(timezone.utc).isoformat()
+            db.execute(
+                "INSERT INTO metadata (key, value, updated_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                (key, str(body.get("value", "")), now),
+            )
+            db.commit()
+            return {"key": key, "status": "saved"}
