@@ -17,6 +17,7 @@ import { Compare } from './pages/Compare.js';
 import { Trends } from './pages/Trends.js';
 import { Environments } from './pages/Environments.js';
 import { AuthProviders } from './pages/AuthProviders.js';
+import { GraphQLClient } from './pages/GraphQLClient.js';
 
 const html = htm.bind(h);
 
@@ -65,6 +66,9 @@ function AppRouter() {
             break;
         case '/auth-providers':
             page = html`<${AuthProviders} />`;
+            break;
+        case '/graphql-client':
+            page = html`<${GraphQLClient} />`;
             break;
         default:
             page = html`

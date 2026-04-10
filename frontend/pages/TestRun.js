@@ -29,6 +29,7 @@ export function TestRun() {
     const [stopping, setStopping] = useState(false);
     const [rpsData, setRpsData] = useState([]);
     const [latencyData, setLatencyData] = useState([]);
+    const [activeTab, setActiveTab] = useState('stats');
     const pollRef = useRef(null);
     const runId = params?.id;
     const engine = params?.engine || 'locust';
@@ -106,7 +107,7 @@ export function TestRun() {
 
             <!-- Summary Cards -->
             <div class="metric-grid" style="margin-bottom: var(--space-4);">
-                <div class="metric-card">
+                <div class="metric-card info">
                     <div class="metric-value">${fmtDur(elapsed)}</div>
                     <div class="metric-label">Elapsed</div>
                 </div>
@@ -114,7 +115,7 @@ export function TestRun() {
                     <div class="metric-value">${status.user_count || '—'}</div>
                     <div class="metric-label">Users</div>
                 </div>
-                <div class="metric-card">
+                <div class="metric-card success">
                     <div class="metric-value">${fmtNum(totalRps)}</div>
                     <div class="metric-label">RPS</div>
                 </div>
@@ -122,12 +123,12 @@ export function TestRun() {
                     <div class="metric-value">${fmtNum(totalRequests)}</div>
                     <div class="metric-label">Total Requests</div>
                 </div>
-                <div class="metric-card">
-                    <div class="metric-value" style=${totalFailures > 0 ? 'color: var(--color-error)' : ''}>${totalFailures}</div>
+                <div class="metric-card ${totalFailures > 0 ? 'error' : 'success'}">
+                    <div class="metric-value">${totalFailures}</div>
                     <div class="metric-label">Failures</div>
                 </div>
-                <div class="metric-card">
-                    <div class="metric-value" style=${parseFloat(errorRate) > 5 ? 'color: var(--color-error)' : ''}>${errorRate}%</div>
+                <div class="metric-card ${parseFloat(errorRate) > 5 ? 'error' : parseFloat(errorRate) > 1 ? 'warning' : 'success'}">
+                    <div class="metric-value">${errorRate}%</div>
                     <div class="metric-label">Error Rate</div>
                 </div>
             </div>
@@ -144,50 +145,117 @@ export function TestRun() {
                 </div>
             </div>
 
-            <!-- Per-Operation Stats -->
-            <div class="card" style="margin-bottom: var(--space-4);">
-                <h3 style="margin-bottom: var(--space-3); font-size: var(--font-size-sm);">Per-Operation Stats</h3>
-                <div class="table-container">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Operation</th>
-                                <th>Type</th>
-                                <th style="text-align: right;">Requests</th>
-                                <th style="text-align: right;">Failures</th>
-                                <th style="text-align: right;">RPS</th>
-                                <th style="text-align: right;">Avg</th>
-                                <th style="text-align: right;">P50</th>
-                                <th style="text-align: right;">P90</th>
-                                <th style="text-align: right;">P95</th>
-                                <th style="text-align: right;">P99</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${(status.operations || []).map(op => html`
-                                <tr key=${op.name}>
-                                    <td style="font-weight: 500;">${op.name}</td>
-                                    <td><span class="badge badge-${op.type === 'mutation' ? 'warning' : 'running'}">${op.type || '—'}</span></td>
-                                    <td style="text-align: right;">${op.total_requests || 0}</td>
-                                    <td style="text-align: right; ${(op.failures || 0) > 0 ? 'color: var(--color-error);' : ''}">${op.failures || 0}</td>
-                                    <td style="text-align: right;">${fmtNum(op.rps || 0)}</td>
-                                    <td style="text-align: right;">${fmtMs(op.avg_response_time)}</td>
-                                    <td style="text-align: right;">${fmtMs(op.p50)}</td>
-                                    <td style="text-align: right;">${fmtMs(op.p90)}</td>
-                                    <td style="text-align: right;">${fmtMs(op.p95)}</td>
-                                    <td style="text-align: right;">${fmtMs(op.p99)}</td>
-                                </tr>
-                            `)}
-                        </tbody>
-                    </table>
-                </div>
+            <!-- Tabbed section: Stats / Errors / Debug Logs -->
+            <div class="tabs" style="margin-bottom: var(--space-3);">
+                <button class=${`tab ${activeTab === 'stats' ? 'active' : ''}`}
+                    onClick=${() => setActiveTab('stats')}>
+                    Per-Operation Stats ${(status.operations || []).length > 0 ? '(' + (status.operations || []).length + ')' : ''}
+                </button>
+                <button class=${`tab ${activeTab === 'errors' ? 'active' : ''}`}
+                    onClick=${() => setActiveTab('errors')}>
+                    Errors ${(status.errors || []).length > 0 ? '(' + (status.errors || []).length + ')' : ''}
+                </button>
+                ${status.debug_mode && html`
+                    <button class=${`tab ${activeTab === 'debug' ? 'active' : ''}`}
+                        onClick=${() => setActiveTab('debug')}>
+                        Debug Logs ${(status.debug_logs || []).length > 0 ? '(' + (status.debug_logs || []).length + ')' : ''}
+                    </button>
+                `}
             </div>
 
-            <!-- Error Log -->
-            ${(status.errors || []).length > 0 && html`
-                <div class="card">
-                    <h3 style="margin-bottom: var(--space-3); font-size: var(--font-size-sm);">Errors (${status.errors.length})</h3>
-                    <${ErrorLog} errors=${status.errors} maxHeight="300px" />
+            ${activeTab === 'stats' && html`
+                <div class="card" style="margin-bottom: var(--space-4);">
+                    ${(status.operations || []).length === 0 ? html`
+                        <div class="empty-state" style="padding: var(--space-4);">
+                            <div class="text-muted">No operation stats yet. ${isRunning ? 'Waiting for data...' : 'No data recorded for this run.'}</div>
+                        </div>
+                    ` : html`
+                        <div class="table-container">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Operation</th>
+                                        <th>Type</th>
+                                        <th style="text-align: right;">Requests</th>
+                                        <th style="text-align: right;">Failures</th>
+                                        <th style="text-align: right;">RPS</th>
+                                        <th style="text-align: right;">Avg</th>
+                                        <th style="text-align: right;">P50</th>
+                                        <th style="text-align: right;">P90</th>
+                                        <th style="text-align: right;">P95</th>
+                                        <th style="text-align: right;">P99</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${(status.operations || []).map(op => {
+                                        const failRate = (op.total_requests || 0) > 0 ? (op.failures || 0) / (op.total_requests || 1) * 100 : 0;
+                                        return html`
+                                        <tr key=${op.name}>
+                                            <td style="font-weight: 500;">${op.name}</td>
+                                            <td><span class="badge badge-${op.type === 'mutation' ? 'warning' : 'running'}">${op.type || '—'}</span></td>
+                                            <td style="text-align: right; font-family: var(--font-mono);">${op.total_requests || 0}</td>
+                                            <td style="text-align: right; font-family: var(--font-mono); ${(op.failures || 0) > 0 ? 'color: var(--color-error); font-weight: 600;' : 'color: var(--color-success);'}">${op.failures || 0}${failRate > 0 ? ' (' + failRate.toFixed(1) + '%)' : ''}</td>
+                                            <td style="text-align: right; font-family: var(--font-mono);">${fmtNum(op.rps || 0)}</td>
+                                            <td style="text-align: right; font-family: var(--font-mono);">${fmtMs(op.avg_response_time)}</td>
+                                            <td style="text-align: right; font-family: var(--font-mono);">${fmtMs(op.p50)}</td>
+                                            <td style="text-align: right; font-family: var(--font-mono);">${fmtMs(op.p90)}</td>
+                                            <td style="text-align: right; font-family: var(--font-mono);">${fmtMs(op.p95)}</td>
+                                            <td style="text-align: right; font-family: var(--font-mono);">${fmtMs(op.p99)}</td>
+                                        </tr>`;
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    `}
+                </div>
+            `}
+
+            ${activeTab === 'errors' && html`
+                <div class="card" style="margin-bottom: var(--space-4);">
+                    ${(status.errors || []).length === 0 ? html`
+                        <div class="empty-state" style="padding: var(--space-4);">
+                            <div class="text-muted">No errors recorded.</div>
+                        </div>
+                    ` : html`
+                        <${ErrorLog} errors=${status.errors} maxHeight="500px" />
+                    `}
+                </div>
+            `}
+
+            ${activeTab === 'debug' && status.debug_mode && html`
+                <div class="card" style="margin-bottom: var(--space-4);">
+                    ${(status.debug_logs || []).length === 0 ? html`
+                        <div class="empty-state" style="padding: var(--space-4);">
+                            <div class="text-muted">No debug logs yet. ${isRunning ? 'Waiting for requests...' : ''}</div>
+                        </div>
+                    ` : html`
+                        <div style="max-height: 600px; overflow-y: auto;">
+                            ${(status.debug_logs || []).map((log, idx) => html`
+                                <div key=${idx} style="border-bottom: 1px solid var(--border-primary); padding: var(--space-3); font-size: var(--font-size-xs);">
+                                    <div class="flex items-center justify-between" style="margin-bottom: var(--space-2);">
+                                        <span style="font-weight: 600; color: var(--text-primary);">${log.operation || '—'}</span>
+                                        <div class="flex items-center gap-3">
+                                            <span class="badge ${log.response?.status_code === 200 ? 'badge-running' : 'badge-error'}">
+                                                ${log.response?.status_code || '—'}
+                                            </span>
+                                            <span class="text-muted">${log.response?.latency_ms ? log.response.latency_ms.toFixed(0) + 'ms' : '—'}</span>
+                                            <span class="text-muted">${log.timestamp ? new Date(log.timestamp * 1000).toLocaleTimeString() : ''}</span>
+                                        </div>
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
+                                        <div>
+                                            <div class="text-muted" style="margin-bottom: 4px; font-weight: 500;">Request</div>
+                                            <pre style="margin: 0; padding: var(--space-2); background: var(--bg-tertiary); border-radius: var(--radius-sm); overflow-x: auto; max-height: 200px; white-space: pre-wrap; word-break: break-all; font-family: var(--font-mono); font-size: 11px;">${JSON.stringify(log.request?.body, null, 2)}</pre>
+                                        </div>
+                                        <div>
+                                            <div class="text-muted" style="margin-bottom: 4px; font-weight: 500;">Response</div>
+                                            <pre style="margin: 0; padding: var(--space-2); background: var(--bg-tertiary); border-radius: var(--radius-sm); overflow-x: auto; max-height: 200px; white-space: pre-wrap; word-break: break-all; font-family: var(--font-mono); font-size: 11px;">${typeof log.response?.body === 'object' ? JSON.stringify(log.response.body, null, 2) : log.response?.body || '—'}</pre>
+                                        </div>
+                                    </div>
+                                </div>
+                            `)}
+                        </div>
+                    `}
                 </div>
             `}
 

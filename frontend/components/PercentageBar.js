@@ -3,6 +3,7 @@
  */
 import { h } from 'preact';
 import htm from 'htm';
+import { Icon } from './Icons.js';
 
 const html = htm.bind(h);
 
@@ -28,7 +29,7 @@ export function PercentageBar({ segments = [] }) {
             <div class="flex justify-between mt-2" style="font-size: var(--font-size-xs); color: var(--text-secondary);">
                 <span>Total: ${total.toFixed(1)}%</span>
                 <span class="${Math.abs(total - 100) < 0.1 ? 'text-success' : 'text-error'}">
-                    ${Math.abs(total - 100) < 0.1 ? '✓ Valid' : `${(100 - total).toFixed(1)}% remaining`}
+                    ${Math.abs(total - 100) < 0.1 ? html`<${Icon} name="check-circle" size=${12} style=${{marginRight: '4px'}} /> Valid` : `${(100 - total).toFixed(1)}% remaining`}
                 </span>
             </div>
         </div>

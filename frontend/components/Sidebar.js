@@ -5,6 +5,7 @@ import { h } from 'preact';
 import htm from 'htm';
 import { useAuth } from '../lib/auth.js';
 import { navigate } from '../lib/router.js';
+import { Icon, NAV_ICONS } from './Icons.js';
 
 const html = htm.bind(h);
 
@@ -12,23 +13,29 @@ const NAV_SECTIONS = [
     {
         label: 'Overview',
         items: [
-            { path: '/', label: 'Dashboard', icon: '⊞' },
+            { path: '/', label: 'Dashboard' },
         ],
     },
     {
         label: 'Performance Testing',
         items: [
-            { path: '/test-configs', label: 'Test Configs', icon: '⚙' },
-            { path: '/test-history', label: 'Test History', icon: '☰' },
-            { path: '/compare', label: 'Compare', icon: '⇄' },
-            { path: '/trends', label: 'Trends', icon: '↗' },
+            { path: '/test-configs', label: 'Test Configs' },
+            { path: '/test-history', label: 'Test History' },
+            { path: '/compare', label: 'Compare' },
+            { path: '/trends', label: 'Trends' },
         ],
     },
     {
         label: 'Configuration',
         items: [
-            { path: '/environments', label: 'Environments', icon: '◎' },
-            { path: '/auth-providers', label: 'Auth Providers', icon: '🔑' },
+            { path: '/environments', label: 'Environments' },
+            { path: '/auth-providers', label: 'Auth Providers' },
+        ],
+    },
+    {
+        label: 'Tools',
+        items: [
+            { path: '/graphql-client', label: 'GraphQL Client' },
         ],
     },
 ];
@@ -46,7 +53,7 @@ export function Sidebar({ currentPath }) {
     return html`
         <aside class="sidebar">
             <div class="sidebar-logo">
-                <div class="logo-icon">G</div>
+                <div class="logo-icon"><${Icon} name="gauge" size=${20} /></div>
                 <h1>GraphQL Meter</h1>
             </div>
 
@@ -61,7 +68,7 @@ export function Sidebar({ currentPath }) {
                                     href="#${item.path}"
                                     onClick=${(e) => handleNav(e, item.path)}
                                 >
-                                    <span class="sidebar-nav-icon">${item.icon}</span>
+                                    <span class="sidebar-nav-icon"><${Icon} name=${NAV_ICONS[item.path] || 'circle'} size=${16} /></span>
                                     ${item.label}
                                 </a>
                             </div>
@@ -78,7 +85,7 @@ export function Sidebar({ currentPath }) {
                             <div class="sidebar-user-name">${user.display_name || user.username}</div>
                             <div class="sidebar-user-role">${user.role}</div>
                         </div>
-                        <button class="btn btn-ghost btn-sm" onClick=${logout} title="Logout">⏻</button>
+                        <button class="btn btn-ghost btn-sm" onClick=${logout} title="Logout"><${Icon} name="log-out" size=${14} /></button>
                     </div>
                 </div>
             `}

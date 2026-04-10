@@ -3,6 +3,7 @@
  */
 import { h } from 'preact';
 import htm from 'htm';
+import { Icon } from './Icons.js';
 
 const html = htm.bind(h);
 
@@ -28,7 +29,7 @@ export function WizardStepper({ steps, currentStep }) {
                             font-size: var(--font-size-xs); font-weight: 600;
                             background: ${bg}; color: ${textColor};
                             border: 2px solid ${isDone || isActive ? 'var(--accent-primary)' : 'var(--border-medium)'};
-                        ">${isDone ? '✓' : stepNum}</div>
+                        ">${isDone ? html`<${Icon} name="check" size=${14} />` : stepNum}</div>
                         <span style="font-size: var(--font-size-sm); color: ${isActive ? 'var(--text-primary)' : 'var(--text-secondary)'}; font-weight: ${isActive ? '500' : '400'};">
                             ${label}
                         </span>

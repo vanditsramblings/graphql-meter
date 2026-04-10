@@ -7,6 +7,7 @@ import htm from 'htm';
 import { apiGet } from '../lib/api.js';
 import { StatusBadge } from '../components/StatusBadge.js';
 import { Spinner } from '../components/Spinner.js';
+import { Icon } from '../components/Icons.js';
 
 const html = htm.bind(h);
 
@@ -122,7 +123,7 @@ export function Dashboard() {
                     <h3 class="card-title">Active Test Runs</h3>
                 </div>
                 <div class="empty-state" style="padding: var(--space-6);">
-                    <div class="empty-state-icon">⚡</div>
+                    <div class="empty-state-icon"><${Icon} name="zap" size=${32} /></div>
                     <div class="empty-state-title">No Active Runs</div>
                     <div class="empty-state-description">Start a test from the Test Configs page to see live results here.</div>
                 </div>

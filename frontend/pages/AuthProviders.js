@@ -12,16 +12,17 @@ import { Spinner } from '../components/Spinner.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { StatusBadge } from '../components/StatusBadge.js';
+import { Icon } from '../components/Icons.js';
 
 const html = htm.bind(h);
 
 const AUTH_TYPE_LABELS = {
-    bearer_token: '🔑 Bearer Token',
-    basic: '🔐 Basic Auth',
-    api_key: '🗝️ API Key',
-    oauth2_client_credentials: '🌐 OAuth2 Client Credentials',
-    oauth2_password: '👤 OAuth2 Password',
-    jwt_custom: '🎫 Custom JWT',
+    bearer_token: 'Bearer Token',
+    basic: 'Basic Auth',
+    api_key: 'API Key',
+    oauth2_client_credentials: 'OAuth2 Client Credentials',
+    oauth2_password: 'OAuth2 Password',
+    jwt_custom: 'Custom JWT',
 };
 
 function FieldInput({ field, value, onChange }) {
@@ -70,6 +71,8 @@ export function AuthProviders() {
     const [testing, setTesting] = useState(false);
     const [testResult, setTestResult] = useState(null);
     const [deleteTarget, setDeleteTarget] = useState(null);
+    const [search, setSearch] = useState('');
+    const [filterType, setFilterType] = useState('');
 
     const fetchProviders = async () => {
         try {
@@ -119,7 +122,7 @@ export function AuthProviders() {
         // Preserve config if editing, reset if new
         if (!editProvider) {
             const defaults = {};
-            (typeSchemas[newType] || []).forEach(f => {
+            (typeSchemas[newType]?.fields || []).forEach(f => {
                 if (f.default !== undefined) defaults[f.name] = f.default;
             });
             setFormConfig(defaults);
@@ -181,7 +184,7 @@ export function AuthProviders() {
         }
     };
 
-    const currentFields = typeSchemas[formType] || [];
+    const currentFields = typeSchemas[formType]?.fields || [];
 
     if (loading) return html`<${Spinner} size="lg" message="Loading..." />`;
 
@@ -198,20 +201,41 @@ export function AuthProviders() {
             ${providers.length === 0 ? html`
                 <div class="card">
                     <div class="empty-state">
-                        <div class="empty-state-icon">🔐</div>
+                        <div class="empty-state-icon"><${Icon} name="lock" size=${32} /></div>
                         <div class="empty-state-title">No Auth Providers</div>
                         <div class="empty-state-description">Configure authentication providers to authenticate your load test requests.</div>
                         <button class="btn btn-primary" onClick=${openNew}>+ New Provider</button>
                     </div>
                 </div>
             ` : html`
+                <div class="search-bar">
+                    <input class="form-input" placeholder="Search providers..."
+                        value=${search} onInput=${(e) => setSearch(e.target.value)} />
+                    <div class="filter-chips">
+                        ${['', ...Object.keys(typeSchemas)].map(t => html`
+                            <span key=${t} class="filter-chip ${filterType === t ? 'active' : ''}"
+                                onClick=${() => setFilterType(filterType === t ? '' : t)}>
+                                ${t ? (AUTH_TYPE_LABELS[t] || t) : 'All'}
+                            </span>
+                        `)}
+                    </div>
+                </div>
+                ${(() => {
+                    const filtered = providers.filter(p => {
+                        const q = search.toLowerCase();
+                        const matchSearch = !q || p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q);
+                        const matchType = !filterType || p.auth_type === filterType;
+                        return matchSearch && matchType;
+                    });
+                    if (filtered.length === 0) return html`<div class="card"><div class="empty-state" style="padding: var(--space-6);"><p class="text-muted">No providers match your filter.</p></div></div>`;
+                    return html`
                 <div class="table-container">
                     <table class="table">
                         <thead><tr>
                             <th>Name</th><th>Type</th><th>Description</th><th>Updated</th><th></th>
                         </tr></thead>
                         <tbody>
-                            ${providers.map(p => html`
+                            ${filtered.map(p => html`
                                 <tr key=${p.id}>
                                     <td style="font-weight: 500;">${p.name}</td>
                                     <td><span class="badge">${AUTH_TYPE_LABELS[p.auth_type] || p.auth_type}</span></td>
@@ -221,15 +245,26 @@ export function AuthProviders() {
                                     </td>
                                     <td>
                                         <div class="flex gap-2 justify-end">
-                                            <button class="btn btn-ghost btn-sm" onClick=${() => openEdit(p)}>✏️</button>
-                                            <button class="btn btn-ghost btn-sm" onClick=${() => setDeleteTarget(p)}>🗑</button>
+                                            ${(p.auth_type || '').includes('oauth2') || p.auth_type === 'jwt_custom' ? html`
+                                                <button class="btn btn-ghost btn-sm" title="Refresh token"
+                                                    onClick=${async () => {
+                                                        try {
+                                                            await apiPost('/api/authproviders/' + p.id + '/refresh');
+                                                            toast.success('Token refreshed');
+                                                        } catch (e) { toast.error('Refresh failed: ' + (e.message || '')); }
+                                                    }}><${Icon} name="refresh" size=${14} /></button>
+                                            ` : ''}
+                                            <button class="btn btn-ghost btn-sm" onClick=${() => openEdit(p)}><${Icon} name="edit" size=${14} /></button>
+                                            <button class="btn btn-ghost btn-sm" onClick=${() => setDeleteTarget(p)}><${Icon} name="trash" size=${14} /></button>
                                         </div>
                                     </td>
                                 </tr>
                             `)}
                         </tbody>
                     </table>
-                </div>
+                </div>`;
+                })()}
+                <div class="text-muted mt-2" style="font-size: var(--font-size-xs);">${providers.length} provider${providers.length !== 1 ? 's' : ''}</div>
             `}
 
             <${Modal} isOpen=${showForm}
@@ -285,7 +320,7 @@ export function AuthProviders() {
                     ${testResult && html`
                         <div class="card" style="margin-bottom: var(--space-3); background: ${testResult.ok ? 'var(--bg-success)' : 'var(--bg-error)'};">
                             <div style="font-weight: 500; color: ${testResult.ok ? 'var(--color-success)' : 'var(--color-error)'};">
-                                ${testResult.ok ? '✓ Connection successful' : '✗ ' + (testResult.error || 'Test failed')}
+                                ${testResult.ok ? html`<${Icon} name="check-circle" size=${14} style=${{marginRight: '4px'}} /> Connection successful` : html`<${Icon} name="alert-circle" size=${14} style=${{marginRight: '4px'}} /> ${testResult.error || 'Test failed'}`}
                             </div>
                             ${testResult.headers && html`
                                 <div class="text-mono text-muted" style="font-size: var(--font-size-xs); margin-top: var(--space-2);">
@@ -297,7 +332,7 @@ export function AuthProviders() {
 
                     <div class="flex justify-between mt-4">
                         <button class="btn btn-secondary" onClick=${handleTest} disabled=${testing}>
-                            ${testing ? 'Testing...' : '🔌 Test Connection'}
+                            ${testing ? 'Testing...' : html`<${Icon} name="zap" size=${14} style=${{marginRight: '4px'}} /> Test Connection`}
                         </button>
                         <div class="flex gap-3">
                             <button class="btn btn-secondary" onClick=${() => setShowForm(false)}>Cancel</button>

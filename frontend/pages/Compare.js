@@ -9,6 +9,7 @@ import { useToast } from '../components/Toast.js';
 import { useRoute } from '../lib/router.js';
 import { Spinner } from '../components/Spinner.js';
 import { LineChart } from '../components/LineChart.js';
+import { Icon } from '../components/Icons.js';
 
 const html = htm.bind(h);
 
@@ -21,9 +22,9 @@ function DeltaCell({ v1, v2, lowerIsBetter = true }) {
     const pct = v1 !== 0 ? ((delta / v1) * 100).toFixed(1) : '—';
     const improved = lowerIsBetter ? delta < 0 : delta > 0;
     const color = delta === 0 ? '' : improved ? 'var(--color-success)' : 'var(--color-error)';
-    const arrow = delta === 0 ? '' : delta > 0 ? '▲' : '▼';
+    const iconName = delta === 0 ? null : delta > 0 ? 'trending-up' : 'trending-down';
     return html`<td style="text-align: right; color: ${color}; font-weight: 500;">
-        ${arrow} ${Math.abs(delta).toFixed(1)} (${pct}%)
+        ${iconName && html`<${Icon} name=${iconName} size=${12} style=${{marginRight: '2px'}} />`} ${Math.abs(delta).toFixed(1)} (${pct}%)
     </td>`;
 }
 
@@ -118,14 +119,17 @@ export function Compare() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${(comparison.summary || []).map(m => html`
+                                    ${(comparison.summary || []).map(m => {
+                                        const isErr = m.metric.toLowerCase().includes('failure');
+                                        const isReq = m.metric.toLowerCase().includes('request') && !isErr;
+                                        return html`
                                         <tr key=${m.metric}>
-                                            <td>${m.metric}</td>
-                                            <td style="text-align: right;">${fmtMs(m.run1)}</td>
-                                            <td style="text-align: right;">${fmtMs(m.run2)}</td>
+                                            <td style="font-weight: 500;">${m.metric}</td>
+                                            <td style="text-align: right; font-family: var(--font-mono);">${isErr || isReq ? fmtNum(m.run1) : fmtMs(m.run1)}</td>
+                                            <td style="text-align: right; font-family: var(--font-mono);">${isErr || isReq ? fmtNum(m.run2) : fmtMs(m.run2)}</td>
                                             <${DeltaCell} v1=${m.run1} v2=${m.run2} lowerIsBetter=${m.lower_is_better !== false} />
-                                        </tr>
-                                    `)}
+                                        </tr>`;
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -140,23 +144,27 @@ export function Compare() {
                                     <thead>
                                         <tr>
                                             <th>Operation</th>
-                                            <th style="text-align: right;">Run 1 Avg</th>
-                                            <th style="text-align: right;">Run 2 Avg</th>
-                                            <th style="text-align: right;">Delta</th>
-                                            <th style="text-align: right;">Run 1 P95</th>
-                                            <th style="text-align: right;">Run 2 P95</th>
-                                            <th style="text-align: right;">Delta</th>
+                                            <th style="text-align: right;">R1 Reqs</th>
+                                            <th style="text-align: right;">R2 Reqs</th>
+                                            <th style="text-align: right;">R1 Avg</th>
+                                            <th style="text-align: right;">R2 Avg</th>
+                                            <th style="text-align: right;">Avg Delta</th>
+                                            <th style="text-align: right;">R1 P95</th>
+                                            <th style="text-align: right;">R2 P95</th>
+                                            <th style="text-align: right;">P95 Delta</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         ${comparison.operations.map(op => html`
                                             <tr key=${op.name}>
                                                 <td style="font-weight: 500;">${op.name}</td>
-                                                <td style="text-align: right;">${fmtMs(op.run1_avg)}</td>
-                                                <td style="text-align: right;">${fmtMs(op.run2_avg)}</td>
+                                                <td style="text-align: right; font-family: var(--font-mono);">${fmtNum(op.run1_requests)}</td>
+                                                <td style="text-align: right; font-family: var(--font-mono);">${fmtNum(op.run2_requests)}</td>
+                                                <td style="text-align: right; font-family: var(--font-mono);">${fmtMs(op.run1_avg)}</td>
+                                                <td style="text-align: right; font-family: var(--font-mono);">${fmtMs(op.run2_avg)}</td>
                                                 <${DeltaCell} v1=${op.run1_avg} v2=${op.run2_avg} />
-                                                <td style="text-align: right;">${fmtMs(op.run1_p95)}</td>
-                                                <td style="text-align: right;">${fmtMs(op.run2_p95)}</td>
+                                                <td style="text-align: right; font-family: var(--font-mono);">${fmtMs(op.run1_p95)}</td>
+                                                <td style="text-align: right; font-family: var(--font-mono);">${fmtMs(op.run2_p95)}</td>
                                                 <${DeltaCell} v1=${op.run1_p95} v2=${op.run2_p95} />
                                             </tr>
                                         `)}

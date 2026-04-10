@@ -10,6 +10,7 @@ import { navigate } from '../lib/router.js';
 import { Spinner } from '../components/Spinner.js';
 import { StatusBadge } from '../components/StatusBadge.js';
 import { DataTable } from '../components/DataTable.js';
+import { Icon } from '../components/Icons.js';
 
 const html = htm.bind(h);
 
@@ -90,16 +91,16 @@ export function TestHistory() {
         { key: '_actions', label: '', render: (_, row) => html`
             <div class="flex gap-2">
                 ${row.status === 'running' && html`
-                    <button class="btn btn-ghost btn-sm" onClick=${(e) => { e.stopPropagation(); navigate('/test-run', { id: row.id, engine: row.engine || 'locust' }); }}>📊</button>
+                    <button class="btn btn-ghost btn-sm" onClick=${(e) => { e.stopPropagation(); navigate('/test-run', { id: row.id, engine: row.engine || 'locust' }); }}><${Icon} name="bar-chart" size=${14} /></button>
                 `}
                 ${row.status === 'completed' && html`
-                    <button class="btn btn-ghost btn-sm" title="Add note" onClick=${(e) => { e.stopPropagation(); handleAddNote(row); }}>📝</button>
+                    <button class="btn btn-ghost btn-sm" title="Add note" onClick=${(e) => { e.stopPropagation(); handleAddNote(row); }}><${Icon} name="edit" size=${14} /></button>
                 `}
                 ${row.status === 'completed' && html`
-                    <button class="btn btn-ghost btn-sm" title="Compare" onClick=${(e) => { e.stopPropagation(); navigate('/compare', { run1: row.id }); }}>⚖️</button>
+                    <button class="btn btn-ghost btn-sm" title="Compare" onClick=${(e) => { e.stopPropagation(); navigate('/compare', { run1: row.id }); }}><${Icon} name="git-compare" size=${14} /></button>
                 `}
                 ${(row.status === 'completed' || row.status === 'failed') && html`
-                    <button class="btn btn-ghost btn-sm" title="Cleanup" onClick=${(e) => { e.stopPropagation(); handleCleanup(row); }}>🧹</button>
+                    <button class="btn btn-ghost btn-sm" title="Cleanup" onClick=${(e) => { e.stopPropagation(); handleCleanup(row); }}><${Icon} name="trash" size=${14} /></button>
                 `}
             </div>
         ` },
@@ -127,7 +128,7 @@ export function TestHistory() {
                 ${runs.length === 0 ? html`
                     <div class="card">
                         <div class="empty-state">
-                            <div class="empty-state-icon">📋</div>
+                            <div class="empty-state-icon"><${Icon} name="clipboard" size=${32} /></div>
                             <div class="empty-state-title">No ${tab} runs</div>
                         </div>
                     </div>

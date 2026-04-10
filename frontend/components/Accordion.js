@@ -4,6 +4,7 @@
 import { h } from 'preact';
 import { useState } from 'preact/hooks';
 import htm from 'htm';
+import { Icon } from './Icons.js';
 
 const html = htm.bind(h);
 
@@ -18,7 +19,7 @@ export function Accordion({ title, defaultOpen = false, children, badge }) {
                 onClick=${() => setOpen(!open)}
             >
                 <div class="flex items-center gap-2">
-                    <span style="font-size: var(--font-size-xs); opacity: 0.5;">${open ? '▼' : '▶'}</span>
+                    <span style="font-size: var(--font-size-xs); opacity: 0.5;"><${Icon} name=${open ? 'chevron-down' : 'chevron-right'} size=${12} /></span>
                     <span style="font-weight: 500; font-size: var(--font-size-sm);">${title}</span>
                     ${badge != null && html`<span class="tab-count">${badge}</span>`}
                 </div>
