@@ -107,9 +107,36 @@ def _init_tables(conn: sqlite3.Connection):
             platform TEXT,
             base_url TEXT,
             graphql_path TEXT DEFAULT '/graphql',
+            protocol TEXT DEFAULT 'https' CHECK(protocol IN ('http','https','mtls')),
+            tls_mode TEXT DEFAULT 'standard' CHECK(tls_mode IN ('none','standard','mtls')),
+            cert_type TEXT DEFAULT '' CHECK(cert_type IN ('','none','pem','pfx','cert_key')),
+            cert_data TEXT DEFAULT '',
+            key_data TEXT DEFAULT '',
+            cert_password_encrypted TEXT DEFAULT '',
+            ca_cert_data TEXT DEFAULT '',
+            verify_ssl INTEGER DEFAULT 1,
+            headers_json TEXT DEFAULT '{}',
+            auth_provider_id TEXT DEFAULT '',
             cert_path TEXT,
             key_path TEXT,
             notes TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS graphql_requests (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            environment_id TEXT DEFAULT '',
+            auth_provider_id TEXT DEFAULT '',
+            query TEXT NOT NULL,
+            variables_json TEXT DEFAULT '{}',
+            headers_json TEXT DEFAULT '{}',
+            config_id TEXT DEFAULT '',
+            operation_name TEXT DEFAULT '',
+            last_response_json TEXT DEFAULT '',
+            created_by TEXT,
             created_at TEXT,
             updated_at TEXT
         );
@@ -125,6 +152,30 @@ def _init_tables(conn: sqlite3.Connection):
             updated_at TEXT
         );
     """)
+    conn.commit()
+
+
+def _migrate_schema(conn: sqlite3.Connection):
+    """Apply incremental schema migrations for existing databases."""
+    cursor = conn.execute("PRAGMA table_info(environments)")
+    env_cols = {row[1] for row in cursor.fetchall()}
+
+    new_env_cols = {
+        "protocol": "TEXT DEFAULT 'https'",
+        "tls_mode": "TEXT DEFAULT 'standard'",
+        "cert_type": "TEXT DEFAULT ''",
+        "cert_data": "TEXT DEFAULT ''",
+        "key_data": "TEXT DEFAULT ''",
+        "cert_password_encrypted": "TEXT DEFAULT ''",
+        "ca_cert_data": "TEXT DEFAULT ''",
+        "verify_ssl": "INTEGER DEFAULT 1",
+        "headers_json": "TEXT DEFAULT '{}'",
+        "auth_provider_id": "TEXT DEFAULT ''",
+    }
+    for col, col_type in new_env_cols.items():
+        if col not in env_cols:
+            conn.execute(f"ALTER TABLE environments ADD COLUMN {col} {col_type}")
+
     conn.commit()
 
 
@@ -160,6 +211,7 @@ class StoragePlugin(PluginBase):
         conn = sqlite3.connect(_db_path)
         conn.execute("PRAGMA journal_mode=WAL")
         _init_tables(conn)
+        _migrate_schema(conn)
         _mark_orphan_runs(conn)
         conn.close()
 
