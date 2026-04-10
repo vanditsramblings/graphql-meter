@@ -28,6 +28,7 @@ def run_worker(run_dir: str):
     errors_path = run_path / "errors.jsonl"
     done_path = run_path / "done.json"
     stop_path = run_path / "stop"
+    debug_log_path = run_path / "debug.jsonl"
 
     with open(config_path) as f:
         config = json.load(f)
@@ -88,11 +89,12 @@ def run_worker(run_dir: str):
                     url, json=payload, headers=headers,
                     name=name, catch_response=True
                 ) as response:
+                    resp_body = None
                     if response.status_code == 200:
                         try:
-                            body = response.json()
-                            if "errors" in body:
-                                msg = body["errors"][0].get("message", "GraphQL error")
+                            resp_body = response.json()
+                            if "errors" in resp_body:
+                                msg = resp_body["errors"][0].get("message", "GraphQL error")
                                 response.failure(msg)
                                 _log_error(name, msg, response.status_code)
                         except Exception:
@@ -100,6 +102,14 @@ def run_worker(run_dir: str):
                     else:
                         response.failure(f"HTTP {response.status_code}")
                         _log_error(name, f"HTTP {response.status_code}", response.status_code)
+                        try:
+                            resp_body = response.text[:2000]
+                        except Exception:
+                            pass
+
+                    # Debug logging: full request/response
+                    if debug_mode:
+                        _log_debug(name, payload, response.status_code, resp_body, response.elapsed.total_seconds() * 1000 if hasattr(response, 'elapsed') else 0)
 
             op_task.__name__ = name
             return op_task
@@ -116,6 +126,34 @@ def run_worker(run_dir: str):
         entry = {"timestamp": time.time(), "operation": op_name, "message": message, "status_code": status_code}
         try:
             with open(errors_path, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except Exception:
+            pass
+
+    # Debug logging
+    debug_count = [0]
+
+    def _log_debug(op_name, request_payload, status_code, response_body, latency_ms):
+        if debug_count[0] >= 1000:
+            return
+        debug_count[0] += 1
+        # Redact auth headers
+        entry = {
+            "timestamp": time.time(),
+            "operation": op_name,
+            "request": {
+                "url": url,
+                "method": "POST",
+                "body": request_payload,
+            },
+            "response": {
+                "status_code": status_code,
+                "body": response_body if isinstance(response_body, (dict, list)) else str(response_body)[:2000] if response_body else None,
+                "latency_ms": round(latency_ms, 2),
+            },
+        }
+        try:
+            with open(debug_log_path, "a") as f:
                 f.write(json.dumps(entry) + "\n")
         except Exception:
             pass

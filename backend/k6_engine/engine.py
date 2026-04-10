@@ -92,7 +92,7 @@ def start_run(config: dict, user: str) -> dict:
         (
             run_id, config.get("config_id"), config.get("name", f"k6 Run {run_id[:8]}"),
             "running", now, gp.get("user_count", 10), gp.get("ramp_up_sec", 10),
-            gp.get("duration_sec", 60), gp.get("host", ""), gp.get("platform", "cloud"),
+            gp.get("duration_sec", 60), gp.get("host", ""), gp.get("platform", ""),
             json.dumps(config), "k6", int(config.get("debug_mode", False)),
             int(config.get("cleanup_on_stop", False)), gp.get("environment_id"), user,
         ),

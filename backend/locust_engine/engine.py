@@ -72,7 +72,7 @@ def start_run(config: dict, user: str) -> dict:
         (
             run_id, config.get("config_id"), config.get("name", f"Run {run_id[:8]}"),
             "running", now, gp.get("user_count", 10), gp.get("ramp_up_sec", 10),
-            gp.get("duration_sec", 60), gp.get("host", ""), gp.get("platform", "cloud"),
+            gp.get("duration_sec", 60), gp.get("host", ""), gp.get("platform", ""),
             json.dumps(config), "locust", int(config.get("debug_mode", False)),
             int(config.get("cleanup_on_stop", False)), gp.get("environment_id"), user,
         ),
@@ -96,6 +96,7 @@ def start_run(config: dict, user: str) -> dict:
         "status": "running",
         "stats_deque": deque(maxlen=300),
         "errors": deque(maxlen=500),
+        "debug_logs": deque(maxlen=200),
         "started_at": time.time(),
     }
 
@@ -144,6 +145,7 @@ def get_status(run_id: str) -> dict:
             "latest": latest,
             "history": stats[-60:],  # Last 2 minutes at 2s intervals
             "errors": list(run["errors"])[-20:],
+            "debug_logs": list(run["debug_logs"])[-50:],
         }
 
     # Check filesystem
@@ -182,7 +184,9 @@ def _file_reader(run_id: str):
     stats_path = run_dir / "stats.json"
     errors_path = run_dir / "errors.jsonl"
     done_path = run_dir / "done.json"
+    debug_path = run_dir / "debug.jsonl"
     last_error_pos = 0
+    last_debug_pos = 0
 
     while True:
         time.sleep(2)
@@ -209,6 +213,22 @@ def _file_reader(run_id: str):
                             except Exception:
                                 run["errors"].append({"message": line})
                     last_error_pos = f.tell()
+            except Exception:
+                pass
+
+        # Read new debug logs
+        if debug_path.exists():
+            try:
+                with open(debug_path) as f:
+                    f.seek(last_debug_pos)
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            try:
+                                run["debug_logs"].append(json.loads(line))
+                            except Exception:
+                                pass
+                    last_debug_pos = f.tell()
             except Exception:
                 pass
 
