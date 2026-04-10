@@ -37,7 +37,7 @@ class ResultsPlugin(PluginBase):
         ):
             require_auth(request)
             db = get_db()
-            query = "SELECT id, config_id, name, status, engine, started_at, completed_at, user_count, duration_sec, host, created_by, notes, tags FROM test_runs WHERE 1=1"
+            query = "SELECT id, config_id, name as config_name, status, engine, started_at, completed_at, user_count, duration_sec, host, created_by, notes, tags FROM test_runs WHERE 1=1"
             params = []
             if status:
                 query += " AND status = ?"
@@ -125,11 +125,55 @@ class ResultsPlugin(PluginBase):
                             pass
                 return d
 
+            r1d = run_dict(r1)
+            r2d = run_dict(r2)
+            ops1_list = [dict(o) for o in ops1]
+            ops2_list = [dict(o) for o in ops2]
+
+            # Build summary comparison
+            def _sum(ops, field):
+                return sum(o.get(field, 0) or 0 for o in ops)
+            def _avg(ops, field):
+                vals = [o.get(field, 0) or 0 for o in ops if (o.get(field) or 0) > 0]
+                return sum(vals) / len(vals) if vals else 0
+
+            summary = [
+                {"metric": "Total Requests", "run1": _sum(ops1_list, "request_count"), "run2": _sum(ops2_list, "request_count"), "lower_is_better": False},
+                {"metric": "Total Failures", "run1": _sum(ops1_list, "failure_count"), "run2": _sum(ops2_list, "failure_count"), "lower_is_better": True},
+                {"metric": "Avg Response (ms)", "run1": _avg(ops1_list, "avg_response_ms"), "run2": _avg(ops2_list, "avg_response_ms"), "lower_is_better": True},
+                {"metric": "P50 (ms)", "run1": _avg(ops1_list, "p50_response_ms"), "run2": _avg(ops2_list, "p50_response_ms"), "lower_is_better": True},
+                {"metric": "P95 (ms)", "run1": _avg(ops1_list, "p95_response_ms"), "run2": _avg(ops2_list, "p95_response_ms"), "lower_is_better": True},
+                {"metric": "P99 (ms)", "run1": _avg(ops1_list, "p99_response_ms"), "run2": _avg(ops2_list, "p99_response_ms"), "lower_is_better": True},
+            ]
+
+            # Build per-operation comparison
+            ops1_by_name = {o["operation_name"]: o for o in ops1_list}
+            ops2_by_name = {o["operation_name"]: o for o in ops2_list}
+            all_op_names = sorted(set(list(ops1_by_name.keys()) + list(ops2_by_name.keys())))
+
+            per_op = []
+            for name in all_op_names:
+                o1 = ops1_by_name.get(name, {})
+                o2 = ops2_by_name.get(name, {})
+                per_op.append({
+                    "name": name,
+                    "run1_avg": o1.get("avg_response_ms"),
+                    "run2_avg": o2.get("avg_response_ms"),
+                    "run1_p95": o1.get("p95_response_ms"),
+                    "run2_p95": o2.get("p95_response_ms"),
+                    "run1_requests": o1.get("request_count", 0),
+                    "run2_requests": o2.get("request_count", 0),
+                    "run1_failures": o1.get("failure_count", 0),
+                    "run2_failures": o2.get("failure_count", 0),
+                })
+
             return {
-                "run1": run_dict(r1),
-                "run2": run_dict(r2),
-                "operations1": [dict(o) for o in ops1],
-                "operations2": [dict(o) for o in ops2],
+                "run1": r1d,
+                "run2": r2d,
+                "summary": summary,
+                "operations": per_op,
+                "operations1": ops1_list,
+                "operations2": ops2_list,
             }
 
         @self.router.get("/trends/{config_id}")

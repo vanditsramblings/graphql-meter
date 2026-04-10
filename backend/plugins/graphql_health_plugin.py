@@ -251,3 +251,115 @@ class GraphQLHealthPlugin(PluginBase):
                 "maintenance_mode": _state["maintenance_mode"],
                 "uptime_seconds": int(time.time() - _state["start_time"]),
             }
+
+        @self.router.post("/seed-config")
+        async def seed_default_config(request: Request):
+            """Create a default test configuration targeting the built-in health endpoint.
+
+            This gives new users a ready-to-run demo config.
+            Skips creation if a config named 'Health Endpoint Demo' already exists.
+            """
+            from backend.plugins.auth_plugin import require_role
+            from backend.plugins.storage_plugin import get_db
+            import uuid as _uuid
+
+            user = require_role(request, "maintainer")
+            db = get_db()
+            now = datetime.now(timezone.utc).isoformat()
+
+            # Check for existing seed config
+            existing = db.execute(
+                "SELECT id FROM test_configs WHERE name = ?",
+                ("Health Endpoint Demo",),
+            ).fetchone()
+            if existing:
+                return {"id": existing["id"], "status": "exists", "message": "Default config already exists"}
+
+            config_id = str(_uuid.uuid4())
+            operations = [
+                {
+                    "name": "health",
+                    "type": "query",
+                    "query": "query health { health { status uptime_seconds request_count maintenance_mode timestamp } }",
+                    "enabled": True,
+                    "tps_percentage": 40,
+                    "delay_start_sec": 0,
+                    "data_range_start": 1,
+                    "data_range_end": 100,
+                    "variables": [],
+                },
+                {
+                    "name": "serviceInfo",
+                    "type": "query",
+                    "query": "query serviceInfo { serviceInfo { name version environment features } }",
+                    "enabled": True,
+                    "tps_percentage": 30,
+                    "delay_start_sec": 0,
+                    "data_range_start": 1,
+                    "data_range_end": 100,
+                    "variables": [],
+                },
+                {
+                    "name": "echo",
+                    "type": "query",
+                    "query": 'query echo($message: String!) { echo(message: $message) { message received_at request_number } }',
+                    "enabled": True,
+                    "tps_percentage": 30,
+                    "delay_start_sec": 0,
+                    "data_range_start": 1,
+                    "data_range_end": 100,
+                    "variables": [
+                        {"name": "message", "type": "String!", "value": "hello", "required": True},
+                    ],
+                },
+                {
+                    "name": "setMaintenanceMode",
+                    "type": "mutation",
+                    "query": "mutation setMaintenanceMode($enabled: Boolean!) { setMaintenanceMode(enabled: $enabled) { success maintenance_mode message } }",
+                    "enabled": False,
+                    "tps_percentage": 0,
+                    "delay_start_sec": 0,
+                    "data_range_start": 1,
+                    "data_range_end": 100,
+                    "variables": [
+                        {"name": "enabled", "type": "Boolean!", "value": "false", "required": True},
+                    ],
+                },
+                {
+                    "name": "resetStats",
+                    "type": "mutation",
+                    "query": "mutation resetStats { resetStats { success previous_count message } }",
+                    "enabled": False,
+                    "tps_percentage": 0,
+                    "delay_start_sec": 0,
+                    "data_range_start": 1,
+                    "data_range_end": 100,
+                    "variables": [],
+                },
+            ]
+
+            config_json = json.dumps({
+                "global_params": {
+                    "name": "Health Endpoint Demo",
+                    "description": "Built-in demo config targeting the GraphQL health endpoint",
+                    "host": "http://localhost:8899",
+                    "graphql_path": "/api/graphql-health/graphql",
+                    "user_count": 5,
+                    "ramp_up_sec": 5,
+                    "duration_sec": 30,
+                },
+                "operations": operations,
+                "engine": "locust",
+                "debug_mode": False,
+                "cleanup_on_stop": False,
+                "auth_provider_id": "",
+            })
+
+            db.execute(
+                "INSERT INTO test_configs (id, name, description, schema_text, config_json, created_by, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (config_id, "Health Endpoint Demo", "Built-in demo config targeting the GraphQL health endpoint",
+                 HEALTH_SCHEMA, config_json, user["username"], now, now),
+            )
+            db.commit()
+            return {"id": config_id, "status": "created", "message": "Default config created successfully"}

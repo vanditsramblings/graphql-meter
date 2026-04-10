@@ -265,7 +265,7 @@ class GraphQLClientPlugin(PluginBase):
                 raise HTTPException(400, "No target URL specified. Select an environment or provide a direct URL.")
 
             # Build GraphQL payload
-            payload = {"query": body.query}
+            payload = {"query": body.query , "variables": {}, "operationName": ""}
             if body.variables:
                 payload["variables"] = body.variables
             if body.operation_name:
