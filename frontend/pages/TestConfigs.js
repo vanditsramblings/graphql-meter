@@ -22,7 +22,7 @@ import { StatusBadge } from '../components/StatusBadge.js';
 
 const html = htm.bind(h);
 
-function ConfigList({ configs, onEdit, onNew, onDelete, onSeedDemo }) {
+function ConfigList({ configs, onEdit, onNew, onDelete, onDuplicate, onSeedDemo }) {
     const [search, setSearch] = useState('');
 
     if (!configs || configs.length === 0) {
@@ -71,6 +71,7 @@ function ConfigList({ configs, onEdit, onNew, onDelete, onSeedDemo }) {
                                     </td>
                                     <td>
                                         <div class="flex gap-2 justify-end">
+                                            <button class="btn btn-ghost btn-sm" title="Duplicate" onClick=${(e) => { e.stopPropagation(); onDuplicate && onDuplicate(c); }}><${Icon} name="copy" size=${14} /></button>
                                             <button class="btn btn-ghost btn-sm" onClick=${(e) => { e.stopPropagation(); onDelete(c); }}><${Icon} name="trash" size=${14} /></button>
                                         </div>
                                     </td>
@@ -340,6 +341,16 @@ export function TestConfigs() {
         }
     };
 
+    const handleDuplicate = async (config) => {
+        try {
+            await apiPost('/api/testconfig/duplicate/' + config.id, {});
+            toast.success('Config duplicated');
+            fetchConfigs();
+        } catch (e) {
+            toast.error(e.message || 'Duplicate failed');
+        }
+    };
+
     const handleSeedDemo = async () => {
         try {
             const res = await apiPost('/api/graphql-health/seed-config', {});
@@ -373,7 +384,7 @@ export function TestConfigs() {
             </div>
 
             ${!showWizard && html`
-                <${ConfigList} configs=${configs} onEdit=${openEdit} onNew=${openNew} onDelete=${(c) => setDeleteTarget(c)} onSeedDemo=${handleSeedDemo} />
+                <${ConfigList} configs=${configs} onEdit=${openEdit} onNew=${openNew} onDelete=${(c) => setDeleteTarget(c)} onDuplicate=${handleDuplicate} onSeedDemo=${handleSeedDemo} />
             `}
 
             ${showWizard && html`
@@ -398,10 +409,12 @@ export function TestConfigs() {
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label class="form-label">Host URL *</label>
+                                    <label class="form-label">${globalParams.environment_id ? 'Host URL (optional with environment)' : 'Host URL *'}</label>
                                     <input class="form-input" value=${globalParams.host}
                                         onInput=${(e) => setGlobalParams(p => ({ ...p, host: e.target.value }))}
-                                        placeholder="https://api.example.com" />
+                                        placeholder=${globalParams.environment_id ? 'Resolved from environment' : 'https://api.example.com'}
+                                        disabled=${!!globalParams.environment_id} />
+                                    ${globalParams.environment_id && html`<span class="form-help">URL will be resolved from the selected environment</span>`}
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">GraphQL Path</label>
@@ -434,9 +447,12 @@ export function TestConfigs() {
                                             const env = environments.find(en => en.id === e.target.value);
                                             setGlobalParams(p => ({
                                                 ...p, environment_id: e.target.value,
-                                                host: env ? env.base_url : p.host,
-                                                graphql_path: env ? env.graphql_path : p.graphql_path,
+                                                host: env ? env.base_url : (e.target.value ? '' : p.host),
+                                                graphql_path: env ? (env.graphql_path || '/graphql') : p.graphql_path,
                                             }));
+                                            if (env && env.auth_provider_id) {
+                                                setAuthProviderId(env.auth_provider_id);
+                                            }
                                         }}>
                                         <option value="">— None —</option>
                                         ${environments.map(e => html`<option key=${e.id} value=${e.id}>${e.name} (${e.base_url})</option>`)}
@@ -460,7 +476,7 @@ export function TestConfigs() {
                             <div class="flex justify-between mt-4">
                                 <button class="btn btn-secondary" onClick=${() => setShowWizard(false)}>Cancel</button>
                                 <button class="btn btn-primary" onClick=${handleParseSchema}
-                                    disabled=${parsing || !schemaText.trim() || !globalParams.name || !globalParams.host}>
+                                    disabled=${parsing || !schemaText.trim() || !globalParams.name || (!globalParams.host && !globalParams.environment_id)}>
                                     ${parsing ? 'Parsing...' : 'Parse Schema →'}
                                 </button>
                             </div>
@@ -555,7 +571,8 @@ export function TestConfigs() {
                                                                     let val = e.target.value;
                                                                     try { val = JSON.parse(val); } catch {}
                                                                     updateVar(i, vi, 'value', val);
-                                                                }} />
+                                                                }}
+                                                                placeholder=${(op.data_range_start != null && op.data_range_end != null) ? 'e.g., test-{' + op.data_range_start + '..' + op.data_range_end + '}' : ''} />
                                                         </div>
                                                     `)}
                                                 </div>
@@ -618,10 +635,7 @@ export function TestConfigs() {
                                             <input type="checkbox" checked=${debugMode} onChange=${(e) => setDebugMode(e.target.checked)} />
                                             Debug Mode
                                         </label>
-                                        <label class="flex items-center gap-2" style="cursor: pointer; font-size: var(--font-size-sm);">
-                                            <input type="checkbox" checked=${cleanupOnStop} onChange=${(e) => setCleanupOnStop(e.target.checked)} />
-                                            Cleanup on Stop
-                                        </label>
+
                                     </div>
                                 </div>
                             </div>

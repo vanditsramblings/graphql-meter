@@ -193,6 +193,7 @@ def _metric_reader(run_id: str):
                                 op_stats[name] = {
                                     "request_count": 0, "failure_count": 0,
                                     "total_ms": 0, "min_ms": float("inf"), "max_ms": 0,
+                                    "total_response_bytes": 0, "total_request_bytes": 0,
                                 }
 
                             if metric == "http_req_duration":
@@ -203,6 +204,12 @@ def _metric_reader(run_id: str):
 
                             elif metric == "http_req_failed" and value == 1:
                                 op_stats[name]["failure_count"] += 1
+
+                            elif metric == "http_req_receiving":
+                                op_stats[name]["total_response_bytes"] += int(value)
+
+                            elif metric == "http_req_sending":
+                                op_stats[name]["total_request_bytes"] += int(value)
 
                         except Exception:
                             pass
@@ -231,6 +238,10 @@ def _metric_reader(run_id: str):
                 "min_response_ms": round(st["min_ms"], 2) if st["min_ms"] != float("inf") else 0,
                 "max_response_ms": round(st["max_ms"], 2),
                 "tps_actual": round(cnt / elapsed, 2),
+                "total_response_bytes": st.get("total_response_bytes", 0),
+                "total_request_bytes": st.get("total_request_bytes", 0),
+                "avg_response_bytes": round(st.get("total_response_bytes", 0) / cnt, 0) if cnt > 0 else 0,
+                "avg_request_bytes": round(st.get("total_request_bytes", 0) / cnt, 0) if cnt > 0 else 0,
             }
             snapshot["total_requests"] += cnt
             snapshot["total_failures"] += st["failure_count"]
@@ -267,10 +278,14 @@ def _metric_reader(run_id: str):
                     avg = round(st["total_ms"] / cnt, 2) if cnt > 0 else 0
                     db.execute(
                         "INSERT INTO operation_results (run_id, operation_name, operation_type, request_count, failure_count, "
-                        "avg_response_ms, min_response_ms, max_response_ms) VALUES (?,?,?,?,?,?,?,?)",
+                        "avg_response_ms, min_response_ms, max_response_ms, total_response_bytes, total_request_bytes, "
+                        "avg_response_bytes, avg_request_bytes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                         (run_id, name, "query", cnt, st["failure_count"], avg,
                          round(st["min_ms"], 2) if st["min_ms"] != float("inf") else 0,
-                         round(st["max_ms"], 2)),
+                         round(st["max_ms"], 2),
+                         st.get("total_response_bytes", 0), st.get("total_request_bytes", 0),
+                         round(st.get("total_response_bytes", 0) / cnt, 0) if cnt > 0 else 0,
+                         round(st.get("total_request_bytes", 0) / cnt, 0) if cnt > 0 else 0),
                     )
                 db.commit()
             except Exception as e:

@@ -343,12 +343,16 @@ export function Environments() {
                                         <textarea class="form-textarea text-mono" rows="4" value=${form.cert_data}
                                             onInput=${(e) => setForm(f => ({ ...f, cert_data: e.target.value }))}
                                             placeholder="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----" />
+                                        <input type="file" accept=".pem,.crt,.cer" style="margin-top: 4px; font-size: var(--font-size-xs);"
+                                            onChange=${(e) => { const f = e.target.files[0]; if (f) { const r = new FileReader(); r.onload = () => setForm(fm => ({ ...fm, cert_data: r.result })); r.readAsText(f); } }} />
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Private Key (PEM)</label>
                                         <textarea class="form-textarea text-mono" rows="4" value=${form.key_data}
                                             onInput=${(e) => setForm(f => ({ ...f, key_data: e.target.value }))}
                                             placeholder="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----" />
+                                        <input type="file" accept=".pem,.key" style="margin-top: 4px; font-size: var(--font-size-xs);"
+                                            onChange=${(e) => { const f = e.target.files[0]; if (f) { const r = new FileReader(); r.onload = () => setForm(fm => ({ ...fm, key_data: r.result })); r.readAsText(f); } }} />
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Key Password (if encrypted)</label>
@@ -363,7 +367,9 @@ export function Environments() {
                                         <textarea class="form-textarea text-mono" rows="4" value=${form.cert_data}
                                             onInput=${(e) => setForm(f => ({ ...f, cert_data: e.target.value }))}
                                             placeholder="Base64-encoded PFX content" />
-                                        <span class="form-help">Paste base64-encoded PFX content, or use the upload endpoint</span>
+                                        <input type="file" accept=".pfx,.p12" style="margin-top: 4px; font-size: var(--font-size-xs);"
+                                            onChange=${(e) => { const f = e.target.files[0]; if (f) { const r = new FileReader(); r.onload = () => { const b64 = r.result.split(',')[1]; setForm(fm => ({ ...fm, cert_data: b64 })); }; r.readAsDataURL(f); } }} />
+                                        <span class="form-help">Upload a PFX file or paste base64-encoded content</span>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">PFX Password *</label>
@@ -396,6 +402,8 @@ export function Environments() {
                                     <textarea class="form-textarea text-mono" rows="3" value=${form.ca_cert_data}
                                         onInput=${(e) => setForm(f => ({ ...f, ca_cert_data: e.target.value }))}
                                         placeholder="CA bundle for custom certificate authorities" />
+                                    <input type="file" accept=".pem,.crt,.cer" style="margin-top: 4px; font-size: var(--font-size-xs);"
+                                        onChange=${(e) => { const f = e.target.files[0]; if (f) { const r = new FileReader(); r.onload = () => setForm(fm => ({ ...fm, ca_cert_data: r.result })); r.readAsText(f); } }} />
                                 </div>
                             </div>
                         `}

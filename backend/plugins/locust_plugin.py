@@ -79,6 +79,10 @@ class LocustPlugin(PluginBase):
                     "p90": stats.get("p90_response_ms"),
                     "p95": stats.get("p95_response_ms"),
                     "p99": stats.get("p99_response_ms"),
+                    "avg_response_bytes": stats.get("avg_response_bytes", 0),
+                    "avg_request_bytes": stats.get("avg_request_bytes", 0),
+                    "total_response_bytes": stats.get("total_response_bytes", 0),
+                    "total_request_bytes": stats.get("total_request_bytes", 0),
                 })
 
             # Enrich with DB metadata

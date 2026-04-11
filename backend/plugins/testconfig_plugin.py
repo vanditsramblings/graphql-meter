@@ -118,7 +118,31 @@ class TestConfigPlugin(PluginBase):
                     errors.append(f"TPS% must sum to 100 (got {total_tps:.1f})")
 
             gp = body.config_json.get("global_params", {})
-            if not gp.get("host"):
-                errors.append("Host URL is required")
+            # Host is not required if an environment is selected
+            if not gp.get("host") and not gp.get("environment_id"):
+                errors.append("Host URL or Environment is required")
 
             return {"valid": len(errors) == 0, "errors": errors}
+
+        @self.router.post("/duplicate/{config_id}")
+        async def duplicate_config(config_id: str, request: Request):
+            """Duplicate an existing test configuration."""
+            user = require_role(request, "maintainer")
+            db = get_db()
+            row = db.execute("SELECT * FROM test_configs WHERE id = ?", (config_id,)).fetchone()
+            if not row:
+                raise HTTPException(404, "Config not found")
+
+            src = dict(row)
+            new_id = str(uuid.uuid4())
+            now = datetime.now(timezone.utc).isoformat()
+            new_name = f"{src['name']} (Copy)"
+
+            db.execute(
+                "INSERT INTO test_configs (id, name, description, schema_text, config_json, created_by, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (new_id, new_name, src.get("description", ""), src.get("schema_text", ""),
+                 src.get("config_json", "{}"), user["username"], now, now),
+            )
+            db.commit()
+            return {"id": new_id, "status": "duplicated", "name": new_name}

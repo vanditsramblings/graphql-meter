@@ -86,6 +86,10 @@ def _init_tables(conn: sqlite3.Connection):
             p99_response_ms REAL,
             tps_actual REAL,
             tps_target REAL,
+            total_response_bytes INTEGER DEFAULT 0,
+            total_request_bytes INTEGER DEFAULT 0,
+            avg_response_bytes REAL DEFAULT 0,
+            avg_request_bytes REAL DEFAULT 0,
             stats_json TEXT
         );
 
@@ -128,6 +132,7 @@ def _init_tables(conn: sqlite3.Connection):
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             description TEXT DEFAULT '',
+            folder_name TEXT DEFAULT '',
             environment_id TEXT DEFAULT '',
             auth_provider_id TEXT DEFAULT '',
             query TEXT NOT NULL,
@@ -175,6 +180,31 @@ def _migrate_schema(conn: sqlite3.Connection):
     for col, col_type in new_env_cols.items():
         if col not in env_cols:
             conn.execute(f"ALTER TABLE environments ADD COLUMN {col} {col_type}")
+
+    # Migrate graphql_requests: add folder_name (table may not exist in test DBs)
+    try:
+        cursor = conn.execute("PRAGMA table_info(graphql_requests)")
+        req_cols = {row[1] for row in cursor.fetchall()}
+        if req_cols and "folder_name" not in req_cols:
+            conn.execute("ALTER TABLE graphql_requests ADD COLUMN folder_name TEXT DEFAULT ''")
+    except Exception:
+        pass
+
+    # Migrate operation_results: add response/request byte sizes
+    try:
+        cursor = conn.execute("PRAGMA table_info(operation_results)")
+        op_cols = {row[1] for row in cursor.fetchall()}
+        if op_cols:
+            for col, col_type in {
+                "total_response_bytes": "INTEGER DEFAULT 0",
+                "total_request_bytes": "INTEGER DEFAULT 0",
+                "avg_response_bytes": "REAL DEFAULT 0",
+                "avg_request_bytes": "REAL DEFAULT 0",
+            }.items():
+                if col not in op_cols:
+                    conn.execute(f"ALTER TABLE operation_results ADD COLUMN {col} {col_type}")
+    except Exception:
+        pass
 
     conn.commit()
 

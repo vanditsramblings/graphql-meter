@@ -19,6 +19,7 @@ const html = htm.bind(h);
 function fmtNum(n) { if (n == null) return '—'; return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : n.toFixed(1); }
 function fmtMs(n) { if (n == null) return '—'; return n >= 1000 ? (n / 1000).toFixed(2) + 's' : n.toFixed(0) + 'ms'; }
 function fmtDur(s) { if (!s) return '00:00'; const m = Math.floor(s / 60); const sec = Math.floor(s % 60); return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`; }
+function fmtBytes(b) { if (b == null || b === 0) return '—'; if (b < 1024) return b.toFixed(0) + 'B'; if (b < 1048576) return (b / 1024).toFixed(1) + 'KB'; return (b / 1048576).toFixed(1) + 'MB'; }
 
 export function TestRun() {
     const { params } = useRoute();
@@ -184,6 +185,8 @@ export function TestRun() {
                                         <th style="text-align: right;">P90</th>
                                         <th style="text-align: right;">P95</th>
                                         <th style="text-align: right;">P99</th>
+                                        <th style="text-align: right;">Avg Req</th>
+                                        <th style="text-align: right;">Avg Resp</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -201,6 +204,8 @@ export function TestRun() {
                                             <td style="text-align: right; font-family: var(--font-mono);">${fmtMs(op.p90)}</td>
                                             <td style="text-align: right; font-family: var(--font-mono);">${fmtMs(op.p95)}</td>
                                             <td style="text-align: right; font-family: var(--font-mono);">${fmtMs(op.p99)}</td>
+                                            <td style="text-align: right; font-family: var(--font-mono);">${fmtBytes(op.avg_request_bytes)}</td>
+                                            <td style="text-align: right; font-family: var(--font-mono);">${fmtBytes(op.avg_response_bytes)}</td>
                                         </tr>`;
                                     })}
                                 </tbody>

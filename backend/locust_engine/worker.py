@@ -90,6 +90,11 @@ def run_worker(run_dir: str):
                     name=name, catch_response=True
                 ) as response:
                     resp_body = None
+                    # Track request/response sizes
+                    req_size = len(json.dumps(payload).encode('utf-8'))
+                    resp_size = len(response.content) if hasattr(response, 'content') else 0
+                    _track_size(name, req_size, resp_size)
+
                     if response.status_code == 200:
                         try:
                             resp_body = response.json()
@@ -118,6 +123,15 @@ def run_worker(run_dir: str):
 
     # Error logging
     error_count = [0]
+    # Size tracking per operation
+    size_stats = {}
+
+    def _track_size(op_name, req_bytes, resp_bytes):
+        if op_name not in size_stats:
+            size_stats[op_name] = {"total_req": 0, "total_resp": 0, "count": 0}
+        size_stats[op_name]["total_req"] += req_bytes
+        size_stats[op_name]["total_resp"] += resp_bytes
+        size_stats[op_name]["count"] += 1
 
     def _log_error(op_name, message, status_code):
         if error_count[0] >= 500:
@@ -193,6 +207,7 @@ def run_worker(run_dir: str):
             }
 
             for entry in env.runner.stats.entries.values():
+                ss = size_stats.get(entry.name, {"total_req": 0, "total_resp": 0, "count": 0})
                 stats_data["operations"][entry.name] = {
                     "request_count": entry.num_requests,
                     "failure_count": entry.num_failures,
@@ -204,6 +219,10 @@ def run_worker(run_dir: str):
                     "p95_response_ms": round(entry.get_response_time_percentile(0.95) or 0, 2),
                     "p99_response_ms": round(entry.get_response_time_percentile(0.99) or 0, 2),
                     "tps_actual": round(entry.current_rps, 2) if hasattr(entry, 'current_rps') else 0,
+                    "total_response_bytes": ss["total_resp"],
+                    "total_request_bytes": ss["total_req"],
+                    "avg_response_bytes": round(ss["total_resp"] / ss["count"], 0) if ss["count"] > 0 else 0,
+                    "avg_request_bytes": round(ss["total_req"] / ss["count"], 0) if ss["count"] > 0 else 0,
                 }
                 stats_data["total_requests"] += entry.num_requests
                 stats_data["total_failures"] += entry.num_failures
@@ -249,6 +268,7 @@ def run_worker(run_dir: str):
         "operations": {},
     }
     for entry in env.runner.stats.entries.values():
+        ss = size_stats.get(entry.name, {"total_req": 0, "total_resp": 0, "count": 0})
         final["operations"][entry.name] = {
             "request_count": entry.num_requests,
             "failure_count": entry.num_failures,
@@ -259,6 +279,10 @@ def run_worker(run_dir: str):
             "p90_response_ms": round(entry.get_response_time_percentile(0.9) or 0, 2),
             "p95_response_ms": round(entry.get_response_time_percentile(0.95) or 0, 2),
             "p99_response_ms": round(entry.get_response_time_percentile(0.99) or 0, 2),
+            "total_response_bytes": ss["total_resp"],
+            "total_request_bytes": ss["total_req"],
+            "avg_response_bytes": round(ss["total_resp"] / ss["count"], 0) if ss["count"] > 0 else 0,
+            "avg_request_bytes": round(ss["total_req"] / ss["count"], 0) if ss["count"] > 0 else 0,
         }
 
     try:

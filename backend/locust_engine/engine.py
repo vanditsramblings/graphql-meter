@@ -285,15 +285,19 @@ def _persist_results(run_id: str, final: dict):
             db.execute(
                 "INSERT INTO operation_results (run_id, operation_name, operation_type, request_count, failure_count, "
                 "avg_response_ms, min_response_ms, max_response_ms, p50_response_ms, p90_response_ms, "
-                "p95_response_ms, p99_response_ms, stats_json) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "p95_response_ms, p99_response_ms, total_response_bytes, total_request_bytes, "
+                "avg_response_bytes, avg_request_bytes, stats_json) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     run_id, op_name, "query",
                     op_stats.get("request_count", 0), op_stats.get("failure_count", 0),
                     op_stats.get("avg_response_ms", 0), op_stats.get("min_response_ms", 0),
                     op_stats.get("max_response_ms", 0), op_stats.get("p50_response_ms", 0),
                     op_stats.get("p90_response_ms", 0), op_stats.get("p95_response_ms", 0),
-                    op_stats.get("p99_response_ms", 0), json.dumps(op_stats),
+                    op_stats.get("p99_response_ms", 0),
+                    op_stats.get("total_response_bytes", 0), op_stats.get("total_request_bytes", 0),
+                    op_stats.get("avg_response_bytes", 0), op_stats.get("avg_request_bytes", 0),
+                    json.dumps(op_stats),
                 ),
             )
         db.commit()

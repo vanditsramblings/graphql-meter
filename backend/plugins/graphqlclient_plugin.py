@@ -46,6 +46,7 @@ class GraphQLRequestSaveRequest(BaseModel):
     id: Optional[str] = None
     name: str
     description: str = ""
+    folder_name: str = ""
     environment_id: str = ""
     auth_provider_id: str = ""
     query: str = ""
@@ -420,9 +421,9 @@ class GraphQLClientPlugin(PluginBase):
             require_auth(request)
             db = get_db()
             rows = db.execute(
-                "SELECT id, name, description, environment_id, auth_provider_id, "
-                "config_id, operation_name, created_by, created_at, updated_at "
-                "FROM graphql_requests ORDER BY updated_at DESC"
+                "SELECT id, name, description, folder_name, environment_id, auth_provider_id, "
+                "config_id, operation_name, query, created_by, created_at, updated_at "
+                "FROM graphql_requests ORDER BY folder_name, updated_at DESC"
             ).fetchall()
             return {"requests": [dict(r) for r in rows]}
 
@@ -468,11 +469,11 @@ class GraphQLClientPlugin(PluginBase):
                 existing = db.execute("SELECT id FROM graphql_requests WHERE id = ?", (body.id,)).fetchone()
                 if existing:
                     db.execute(
-                        """UPDATE graphql_requests SET name=?, description=?, environment_id=?,
+                        """UPDATE graphql_requests SET name=?, description=?, folder_name=?, environment_id=?,
                         auth_provider_id=?, query=?, variables_json=?, headers_json=?,
                         config_id=?, operation_name=?, updated_at=?
                         WHERE id=?""",
-                        (body.name, body.description, body.environment_id,
+                        (body.name, body.description, body.folder_name, body.environment_id,
                          body.auth_provider_id, body.query, body.variables_json,
                          body.headers_json, body.config_id, body.operation_name,
                          now, body.id),
@@ -482,11 +483,11 @@ class GraphQLClientPlugin(PluginBase):
 
             req_id = str(uuid.uuid4())
             db.execute(
-                """INSERT INTO graphql_requests (id, name, description, environment_id,
+                """INSERT INTO graphql_requests (id, name, description, folder_name, environment_id,
                 auth_provider_id, query, variables_json, headers_json,
                 config_id, operation_name, created_by, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (req_id, body.name, body.description, body.environment_id,
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (req_id, body.name, body.description, body.folder_name, body.environment_id,
                  body.auth_provider_id, body.query, body.variables_json,
                  body.headers_json, body.config_id, body.operation_name,
                  user["username"], now, now),
@@ -587,6 +588,146 @@ class GraphQLClientPlugin(PluginBase):
                 "global_params": global_params,
                 "schema_text": row["schema_text"] or "",
             }
+
+        @self.router.post("/preview")
+        async def preview_request(body: GraphQLExecuteRequest, request: Request):
+            """Preview the final request that would be sent (headers, URL, payload)."""
+            require_auth(request)
+
+            target = _resolve_target(
+                env_id=body.environment_id,
+                target_url=body.target_url,
+                auth_provider_id=body.auth_provider_id,
+                extra_headers=body.headers,
+                verify_ssl=body.verify_ssl,
+            )
+
+            payload = {"query": body.query, "variables": body.variables or {}}
+            if body.operation_name:
+                payload["operationName"] = body.operation_name
+
+            # Redact auth tokens for display
+            display_headers = dict(target["headers"])
+
+            return {
+                "url": target["url"],
+                "method": "POST",
+                "headers": display_headers,
+                "body": payload,
+                "verify_ssl": target["verify_ssl"],
+                "has_cert": target.get("cert") is not None,
+            }
+
+        @self.router.post("/export/curl")
+        async def export_curl(body: GraphQLExecuteRequest, request: Request):
+            """Export the request as a cURL command."""
+            require_auth(request)
+
+            target = _resolve_target(
+                env_id=body.environment_id,
+                target_url=body.target_url,
+                auth_provider_id=body.auth_provider_id,
+                extra_headers=body.headers,
+                verify_ssl=body.verify_ssl,
+            )
+
+            if not target["url"]:
+                raise HTTPException(400, "No target URL specified")
+
+            payload = {"query": body.query, "variables": body.variables or {}}
+            if body.operation_name:
+                payload["operationName"] = body.operation_name
+
+            # Build curl command
+            parts = ["curl -X POST"]
+            if not target["verify_ssl"]:
+                parts.append("  --insecure")
+            parts.append(f"  '{target['url']}'")
+            for k, v in target["headers"].items():
+                # Redact Authorization value for security
+                display_v = "***REDACTED***" if k.lower() == "authorization" else v
+                parts.append(f"  -H '{k}: {display_v}'")
+            payload_str = json.dumps(payload, separators=(',', ':'))
+            parts.append(f"  -d '{payload_str}'")
+
+            return {"format": "curl", "content": " \\\n".join(parts)}
+
+        @self.router.post("/export/postman")
+        async def export_postman(body: GraphQLExecuteRequest, request: Request):
+            """Export the request as a Postman collection JSON."""
+            require_auth(request)
+
+            target = _resolve_target(
+                env_id=body.environment_id,
+                target_url=body.target_url,
+                auth_provider_id=body.auth_provider_id,
+                extra_headers=body.headers,
+                verify_ssl=body.verify_ssl,
+            )
+
+            if not target["url"]:
+                raise HTTPException(400, "No target URL specified")
+
+            payload = {"query": body.query, "variables": body.variables or {}}
+            if body.operation_name:
+                payload["operationName"] = body.operation_name
+
+            # Build Postman collection v2.1
+            header_list = []
+            for k, v in target["headers"].items():
+                header_list.append({"key": k, "value": v})
+
+            collection = {
+                "info": {
+                    "name": body.operation_name or "GraphQL Request",
+                    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+                },
+                "item": [{
+                    "name": body.operation_name or "GraphQL Query",
+                    "request": {
+                        "method": "POST",
+                        "header": header_list,
+                        "body": {
+                            "mode": "graphql",
+                            "graphql": {
+                                "query": body.query,
+                                "variables": json.dumps(body.variables or {}),
+                            },
+                        },
+                        "url": {"raw": target["url"], "protocol": target["url"].split("://")[0] if "://" in target["url"] else "https"},
+                    },
+                }],
+            }
+
+            return {"format": "postman", "content": json.dumps(collection, indent=2)}
+
+        @self.router.post("/folders/rename")
+        async def rename_folder(request: Request, body: dict):
+            """Rename a folder (updates all requests in that folder)."""
+            require_role(request, "maintainer")
+            old_name = body.get("old_name", "").strip()
+            new_name = body.get("new_name", "").strip()
+            if not old_name or not new_name:
+                raise HTTPException(400, "Both old_name and new_name are required")
+            db = get_db()
+            db.execute(
+                "UPDATE graphql_requests SET folder_name = ? WHERE folder_name = ?",
+                (new_name, old_name),
+            )
+            db.commit()
+            return {"status": "renamed", "old_name": old_name, "new_name": new_name}
+
+        @self.router.post("/folders/delete")
+        async def delete_folder(request: Request, body: dict):
+            """Delete a folder and all its requests."""
+            require_role(request, "maintainer")
+            folder_name = body.get("folder_name", "").strip()
+            if not folder_name:
+                raise HTTPException(400, "folder_name is required")
+            db = get_db()
+            db.execute("DELETE FROM graphql_requests WHERE folder_name = ?", (folder_name,))
+            db.commit()
+            return {"status": "deleted", "folder_name": folder_name}
 
 
 def _format_type_ref(type_ref: dict) -> str:

@@ -14,7 +14,7 @@ import { Icon } from '../components/Icons.js';
 
 const html = htm.bind(h);
 
-const TABS = ['running', 'completed', 'failed', 'cleanup'];
+const TABS = ['running', 'completed', 'failed'];
 
 function fmtDate(d) { return d ? new Date(d).toLocaleString() : '—'; }
 function fmtDur(s) { if (!s) return '—'; const m = Math.floor(s / 60); return m > 0 ? `${m}m ${Math.round(s % 60)}s` : `${Math.round(s)}s`; }
@@ -49,6 +49,8 @@ export function TestHistory() {
 
     const handleClick = (run) => {
         if (run.status === 'running') {
+            navigate('/test-run', { id: run.id, engine: run.engine || 'locust' });
+        } else if (run.status === 'completed' || run.status === 'failed') {
             navigate('/test-run', { id: run.id, engine: run.engine || 'locust' });
         }
     };
@@ -99,9 +101,6 @@ export function TestHistory() {
                 ${row.status === 'completed' && html`
                     <button class="btn btn-ghost btn-sm" title="Compare" onClick=${(e) => { e.stopPropagation(); navigate('/compare', { run1: row.id }); }}><${Icon} name="git-compare" size=${14} /></button>
                 `}
-                ${(row.status === 'completed' || row.status === 'failed') && html`
-                    <button class="btn btn-ghost btn-sm" title="Cleanup" onClick=${(e) => { e.stopPropagation(); handleCleanup(row); }}><${Icon} name="trash" size=${14} /></button>
-                `}
             </div>
         ` },
     ];
@@ -134,7 +133,7 @@ export function TestHistory() {
                     </div>
                 ` : html`
                     <${DataTable} columns=${columns} data=${runs}
-                        onRowClick=${tab === 'running' ? handleClick : null} />
+                        onRowClick=${handleClick} />
                 `}
             `}
         </div>

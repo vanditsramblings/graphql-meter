@@ -162,7 +162,7 @@ export function Trends() {
                                     ${trendRows.map((r, i) => html`
                                         <tr key=${r.run_id || i}>
                                             <td>${i + 1}</td>
-                                            <td style="white-space: nowrap;">${r.started_at ? new Date(r.started_at).toLocaleDateString() : '—'}</td>
+                                            <td style="white-space: nowrap;">${r.started_at ? (() => { const d = new Date(r.started_at); const dd = String(d.getDate()).padStart(2, '0'); const mm = String(d.getMonth() + 1).padStart(2, '0'); const hh = String(d.getHours()).padStart(2, '0'); const mi = String(d.getMinutes()).padStart(2, '0'); return dd + '/' + mm + ' ' + hh + ':' + mi; })() : '—'}</td>
                                             <td style="text-align: right; font-family: var(--font-mono);">${r.requests ?? '—'}</td>
                                             <td style="text-align: right; font-family: var(--font-mono);">${fmtMs(r.avg_ms)}</td>
                                             <td style="text-align: right; font-family: var(--font-mono);">${fmtMs(r.p50)}</td>
