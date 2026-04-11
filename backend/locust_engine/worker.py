@@ -45,6 +45,33 @@ def run_worker(run_dir: str):
 
     url = f"{host.rstrip('/')}{graphql_path}"
 
+    def _resolve_placeholder(value, r_val):
+        """Resolve {r} placeholders in a value, coercing types where possible."""
+        if isinstance(value, str) and "{r}" in value:
+            replaced = value.replace("{r}", str(r_val))
+            # If the entire value is just the number, try numeric coercion
+            try:
+                if replaced == str(int(replaced)):
+                    return int(replaced)
+            except (ValueError, OverflowError):
+                pass
+            try:
+                float(replaced)
+                if "." in replaced:
+                    return float(replaced)
+            except (ValueError, OverflowError):
+                pass
+            return replaced
+        if isinstance(value, dict):
+            return {k: _resolve_placeholder(v, r_val) for k, v in value.items()}
+        if isinstance(value, list):
+            return [_resolve_placeholder(item, r_val) for item in value]
+        return value
+
+    def _resolve_variables(vars_dict, r_val):
+        """Resolve all {r} placeholders in a variables dictionary."""
+        return {k: _resolve_placeholder(v, r_val) for k, v in vars_dict.items()}
+
     # Build dynamic HttpUser
     from locust import HttpUser, task, constant_pacing
 
@@ -72,14 +99,7 @@ def run_worker(run_dir: str):
                 r_val = rng["current"]
                 rng["current"] = rng["current"] + 1 if rng["current"] < rng["end"] else rng["start"]
 
-                resolved_vars = {}
-                for k, v in vars_.items():
-                    if isinstance(v, str) and "{r}" in v:
-                        resolved_vars[k] = v.replace("{r}", str(r_val))
-                    elif isinstance(v, dict):
-                        resolved_vars[k] = json.loads(json.dumps(v).replace("{r}", str(r_val)))
-                    else:
-                        resolved_vars[k] = v
+                resolved_vars = _resolve_variables(vars_, r_val)
 
                 payload = {"query": q, "variables": resolved_vars}
                 headers = {"Content-Type": "application/json"}

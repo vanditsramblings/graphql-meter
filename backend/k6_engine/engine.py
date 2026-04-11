@@ -101,10 +101,10 @@ def start_run(config: dict, user: str) -> dict:
 
     # Spawn k6 subprocess
     proc = subprocess.Popen(
-        [k6_binary, "run", "--out", f"json={metrics_path}", str(script_path)],
+        [k6_binary, "run", "--out", f"json={metrics_path.resolve()}", str(script_path.resolve())],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        cwd=str(run_dir),
+        cwd=str(run_dir.resolve()),
     )
 
     run_info = {
@@ -268,9 +268,13 @@ def _metric_reader(run_id: str):
                     pass
 
                 status = "completed" if proc.returncode == 0 else "failed"
+
+                # Build chart snapshots
+                chart_data = _build_chart_snapshots(run)
+
                 db.execute(
-                    "UPDATE test_runs SET status=?, completed_at=?, summary_json=?, error_log=? WHERE id=?",
-                    (status, now_str, final_summary, stderr_output, run_id),
+                    "UPDATE test_runs SET status=?, completed_at=?, summary_json=?, error_log=?, chart_snapshots=? WHERE id=?",
+                    (status, now_str, final_summary, stderr_output, chart_data, run_id),
                 )
 
                 for name, st in op_stats.items():
@@ -288,6 +292,55 @@ def _metric_reader(run_id: str):
                          round(st.get("total_request_bytes", 0) / cnt, 0) if cnt > 0 else 0),
                     )
                 db.commit()
+
+                # Prune old chart data
+                _prune_chart_history(db)
             except Exception as e:
                 print(f"[k6_engine] Failed to persist results: {e}")
             break
+
+
+def _build_chart_snapshots(run: dict) -> str | None:
+    """Build a size-optimized JSON string of chart data from stats_deque."""
+    snapshots = list(run.get("stats_deque", []))
+    if not snapshots:
+        return None
+    compact = []
+    for s in snapshots:
+        point = {
+            "t": round(s.get("elapsed_sec", 0), 1),
+            "rps": round(s.get("total_rps", 0), 2),
+            "req": s.get("total_requests", 0),
+            "fail": s.get("total_failures", 0),
+        }
+        ops = s.get("operations", {})
+        if ops:
+            lat = {}
+            for name, st in ops.items():
+                lat[name] = round(st.get("avg_response_ms", 0), 1)
+            point["lat"] = lat
+        compact.append(point)
+    return json.dumps(compact, separators=(",", ":"))
+
+
+def _prune_chart_history(db):
+    """Clear chart_snapshots for runs beyond the configurable retention limit."""
+    try:
+        settings = get_settings()
+        limit = settings.CHART_HISTORY_RUNS
+        keep_rows = db.execute(
+            "SELECT id FROM test_runs WHERE chart_snapshots IS NOT NULL AND status IN ('completed','failed') "
+            "ORDER BY started_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        keep_ids = {r["id"] for r in keep_rows}
+        if keep_ids:
+            placeholders = ",".join("?" * len(keep_ids))
+            db.execute(
+                f"UPDATE test_runs SET chart_snapshots = NULL "
+                f"WHERE chart_snapshots IS NOT NULL AND id NOT IN ({placeholders})",
+                list(keep_ids),
+            )
+            db.commit()
+    except Exception:
+        pass

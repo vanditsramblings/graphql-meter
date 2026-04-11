@@ -67,7 +67,7 @@ function ConfigList({ configs, onEdit, onNew, onDelete, onDuplicate, onSeedDemo 
                                     <td class="text-muted">${c.description || '—'}</td>
                                     <td class="text-muted">${c.created_by || '—'}</td>
                                     <td class="text-muted" style="font-size: var(--font-size-xs); white-space: nowrap;">
-                                        ${c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '—'}
+                                        ${c.updated_at ? (() => { const d = new Date(c.updated_at); return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}); })() : '—'}
                                     </td>
                                     <td>
                                         <div class="flex gap-2 justify-end">
@@ -395,13 +395,13 @@ export function TestConfigs() {
                         <div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label class="form-label">Configuration Name *</label>
+                                    <label class="form-label">Configuration Name * <span title="A unique name for this test configuration" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
                                     <input class="form-input" value=${globalParams.name}
                                         onInput=${(e) => setGlobalParams(p => ({ ...p, name: e.target.value }))}
                                         placeholder="e.g., Customer API Load Test" />
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Description</label>
+                                    <label class="form-label">Description <span title="Optional notes about what this test covers" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
                                     <input class="form-input" value=${globalParams.description}
                                         onInput=${(e) => setGlobalParams(p => ({ ...p, description: e.target.value }))}
                                         placeholder="Optional description" />
@@ -409,7 +409,7 @@ export function TestConfigs() {
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label class="form-label">${globalParams.environment_id ? 'Host URL (optional with environment)' : 'Host URL *'}</label>
+                                    <label class="form-label">${globalParams.environment_id ? 'Host URL (optional with environment)' : 'Host URL *'} <span title="The base URL of your GraphQL server. Not needed if an environment is selected." style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
                                     <input class="form-input" value=${globalParams.host}
                                         onInput=${(e) => setGlobalParams(p => ({ ...p, host: e.target.value }))}
                                         placeholder=${globalParams.environment_id ? 'Resolved from environment' : 'https://api.example.com'}
@@ -417,31 +417,31 @@ export function TestConfigs() {
                                     ${globalParams.environment_id && html`<span class="form-help">URL will be resolved from the selected environment</span>`}
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">GraphQL Path</label>
+                                    <label class="form-label">GraphQL Path <span title="The path appended to the host URL, typically /graphql" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
                                     <input class="form-input" value=${globalParams.graphql_path}
                                         onInput=${(e) => setGlobalParams(p => ({ ...p, graphql_path: e.target.value }))} />
                                 </div>
                             </div>
                             <div class="form-row-3">
                                 <div class="form-group">
-                                    <label class="form-label">Users</label>
+                                    <label class="form-label">Users <span title="Number of concurrent virtual users to simulate" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
                                     <input class="form-input" type="number" min="1" value=${globalParams.user_count}
                                         onInput=${(e) => setGlobalParams(p => ({ ...p, user_count: parseInt(e.target.value) || 1 }))} />
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Ramp-up (sec)</label>
+                                    <label class="form-label">Ramp-up (sec) <span title="Time in seconds to gradually add users until the target count is reached" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
                                     <input class="form-input" type="number" min="0" value=${globalParams.ramp_up_sec}
                                         onInput=${(e) => setGlobalParams(p => ({ ...p, ramp_up_sec: parseInt(e.target.value) || 0 }))} />
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Duration (sec)</label>
+                                    <label class="form-label">Duration (sec) <span title="Total test duration in seconds. Test stops automatically after this time." style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
                                     <input class="form-input" type="number" min="10" value=${globalParams.duration_sec}
                                         onInput=${(e) => setGlobalParams(p => ({ ...p, duration_sec: parseInt(e.target.value) || 60 }))} />
                                 </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label class="form-label">Environment</label>
+                                    <label class="form-label">Environment <span title="Select a pre-configured environment to auto-fill host, path, and auth" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
                                     <select class="form-select" value=${globalParams.environment_id || ''}
                                         onChange=${(e) => {
                                             const env = environments.find(en => en.id === e.target.value);
@@ -459,7 +459,7 @@ export function TestConfigs() {
                                     </select>
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Auth Provider</label>
+                                    <label class="form-label">Auth Provider <span title="Authentication provider for injecting auth headers into requests" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
                                     <select class="form-select" value=${authProviderId}
                                         onChange=${(e) => setAuthProviderId(e.target.value)}>
                                         <option value="">— None —</option>
@@ -468,7 +468,7 @@ export function TestConfigs() {
                                 </div>
                             </div>
                             <div class="form-group">
-                                <label class="form-label">GraphQL Schema *</label>
+                                <label class="form-label">GraphQL Schema * <span title="Paste your GraphQL schema definition. Types Query and Mutation will be parsed into operations." style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
                                 <textarea class="form-textarea" rows="12" value=${schemaText}
                                     onInput=${(e) => setSchemaText(e.target.value)}
                                     placeholder="Paste your GraphQL schema here..." />
@@ -538,12 +538,12 @@ export function TestConfigs() {
                                         ${op.enabled && html`
                                             <div class="form-row-3 mb-4">
                                                 <div class="form-group">
-                                                    <label class="form-label">Delay Start (sec)</label>
+                                                    <label class="form-label">Delay Start (sec) <span title="Wait this many seconds before this operation starts sending requests" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
                                                     <input class="form-input" type="number" min="0" value=${op.delay_start_sec}
                                                         onInput=${(e) => updateOp(i, 'delay_start_sec', parseInt(e.target.value) || 0)} />
                                                 </div>
                                                 <div class="form-group">
-                                                    <label class="form-label">Data Range</label>
+                                                    <label class="form-label">Data Range <span title="Range of values substituted into {r} placeholders in variable values during the test" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
                                                     <div class="flex gap-2">
                                                         <input class="form-input" type="number" style="width: 80px;" value=${op.data_range_start}
                                                             onInput=${(e) => updateOp(i, 'data_range_start', parseInt(e.target.value) || 1)} />
@@ -622,14 +622,14 @@ export function TestConfigs() {
 
                             <div class="form-row mb-4">
                                 <div class="form-group">
-                                    <label class="form-label">Load Engine</label>
+                                    <label class="form-label">Load Engine <span title="Locust uses Python workers, k6 uses a Go binary. Both support the same test config." style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
                                     <select class="form-select" value=${engine} onChange=${(e) => setEngine(e.target.value)}>
                                         <option value="locust">Locust (Python)</option>
                                         <option value="k6">k6 (Go)</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Options</label>
+                                    <label class="form-label">Options <span title="Debug mode logs full request/response details for each operation" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
                                     <div class="flex gap-4" style="padding-top: var(--space-2);">
                                         <label class="flex items-center gap-2" style="cursor: pointer; font-size: var(--font-size-sm);">
                                             <input type="checkbox" checked=${debugMode} onChange=${(e) => setDebugMode(e.target.checked)} />

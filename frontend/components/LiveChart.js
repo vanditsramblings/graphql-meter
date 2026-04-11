@@ -24,7 +24,7 @@ export function LiveChart({ data = [], width = 600, height = 200, label = 'RPS',
     const points = data.map((d, i) => {
         const x = padding.left + (i / (data.length - 1)) * chartW;
         const y = padding.top + chartH - ((d.value || 0) / maxVal) * chartH;
-        return { x, y, value: d.value, label: d.label };
+        return { x, y, value: d.value, time: d.time, label: d.label };
     });
 
     const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
@@ -35,6 +35,21 @@ export function LiveChart({ data = [], width = 600, height = 200, label = 'RPS',
         y: padding.top + chartH * (1 - pct),
         label: (maxVal * pct).toFixed(maxVal > 100 ? 0 : 1),
     }));
+
+    // X-axis time labels (show ~5 evenly spaced)
+    const xTickCount = Math.min(5, points.length);
+    const xTicks = [];
+    if (points.length > 1) {
+        for (let t = 0; t < xTickCount; t++) {
+            const idx = Math.round(t * (points.length - 1) / (xTickCount - 1));
+            const pt = points[idx];
+            if (pt && pt.time) {
+                const d = new Date(pt.time);
+                const lbl = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
+                xTicks.push({ x: pt.x, label: lbl });
+            }
+        }
+    }
 
     return html`
         <svg width="100%" viewBox="0 0 ${width} ${height}" style="display: block;">
@@ -70,6 +85,14 @@ export function LiveChart({ data = [], width = 600, height = 200, label = 'RPS',
             <text x=${padding.left + 4} y=${padding.top - 6} fill="var(--text-secondary)" font-size="11" font-weight="500">
                 ${label}: ${data[data.length - 1]?.value?.toFixed(1) || '0'}
             </text>
+
+            <!-- X-axis time labels -->
+            ${xTicks.map(t => html`
+                <text x=${t.x} y=${padding.top + chartH + 16} text-anchor="middle"
+                    fill="var(--text-secondary)" font-size="9" font-family="var(--font-mono)">
+                    ${t.label}
+                </text>
+            `)}
         </svg>
     `;
 }

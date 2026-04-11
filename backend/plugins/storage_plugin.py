@@ -206,6 +206,15 @@ def _migrate_schema(conn: sqlite3.Connection):
     except Exception:
         pass
 
+    # Migrate test_runs: add chart_snapshots column for historical chart data
+    try:
+        cursor = conn.execute("PRAGMA table_info(test_runs)")
+        run_cols = {row[1] for row in cursor.fetchall()}
+        if run_cols and "chart_snapshots" not in run_cols:
+            conn.execute("ALTER TABLE test_runs ADD COLUMN chart_snapshots TEXT")
+    except Exception:
+        pass
+
     conn.commit()
 
 

@@ -41,12 +41,25 @@ export function TestRun() {
             const res = await apiGet(`/api/${engine}/status/${runId}`);
             if (res) {
                 setStatus(res);
-                // Append chart data
-                const ts = Date.now();
-                const totalRps = (res.operations || []).reduce((s, o) => s + (o.rps || 0), 0);
-                const avgLat = (res.operations || []).reduce((s, o) => s + (o.avg_response_time || 0), 0) / Math.max((res.operations || []).length, 1);
-                setRpsData(prev => [...prev.slice(-120), { time: ts, value: totalRps }]);
-                setLatencyData(prev => [...prev.slice(-120), { time: ts, value: avgLat }]);
+
+                // If chart_snapshots available (historical run), reconstruct chart data
+                if (res.chart_snapshots && res.chart_snapshots.length > 0 && rpsData.length === 0) {
+                    const rps = res.chart_snapshots.map(s => ({ time: s.t * 1000, value: s.rps || 0 }));
+                    const lat = res.chart_snapshots.map(s => {
+                        const latencies = s.lat ? Object.values(s.lat) : [];
+                        const avg = latencies.length > 0 ? latencies.reduce((a, b) => a + b, 0) / latencies.length : 0;
+                        return { time: s.t * 1000, value: avg };
+                    });
+                    setRpsData(rps);
+                    setLatencyData(lat);
+                } else if (!res.chart_snapshots) {
+                    // Live run — append chart data
+                    const ts = Date.now();
+                    const totalRps = (res.operations || []).reduce((s, o) => s + (o.rps || 0), 0);
+                    const avgLat = (res.operations || []).reduce((s, o) => s + (o.avg_response_time || 0), 0) / Math.max((res.operations || []).length, 1);
+                    setRpsData(prev => [...prev.slice(-120), { time: ts, value: totalRps }]);
+                    setLatencyData(prev => [...prev.slice(-120), { time: ts, value: avgLat }]);
+                }
 
                 if (res.status === 'completed' || res.status === 'failed' || res.status === 'stopped') {
                     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -133,6 +146,16 @@ export function TestRun() {
                     <div class="metric-label">Error Rate</div>
                 </div>
             </div>
+
+            <!-- Error banner for failed runs -->
+            ${status.status === 'failed' && (status.errors || []).length > 0 && html`
+                <div class="card" style="margin-bottom: var(--space-4); border-left: 4px solid var(--color-error); background: rgba(239,68,68,0.08); padding: var(--space-4);">
+                    <h3 style="color: var(--color-error); margin-bottom: var(--space-2); font-size: var(--font-size-base);">Test Failed</h3>
+                    <div style="max-height: 200px; overflow-y: auto; font-family: var(--font-mono); font-size: var(--font-size-xs); white-space: pre-wrap; color: var(--text-secondary);">
+                        ${(status.errors || []).map(e => typeof e === 'string' ? e : (e.message || JSON.stringify(e))).join('\n')}
+                    </div>
+                </div>
+            `}
 
             <!-- Charts Row -->
             <div class="form-row" style="margin-bottom: var(--space-4);">

@@ -81,7 +81,7 @@ export function Compare() {
                                 <option value="">Select run...</option>
                                 ${runs.map(r => html`
                                     <option key=${r.id} value=${r.id}>
-                                        ${r.config_name || r.id} — ${new Date(r.started_at).toLocaleDateString()} (${r.engine || 'locust'})
+                                        ${r.config_name || r.id} — ${new Date(r.started_at).toLocaleDateString() + ' ' + new Date(r.started_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} (${r.engine || 'locust'})
                                     </option>
                                 `)}
                             </select>
@@ -93,7 +93,7 @@ export function Compare() {
                             <option value="">Select run...</option>
                             ${runs.map(r => html`
                                 <option key=${r.id} value=${r.id}>
-                                    ${r.config_name || r.id} — ${new Date(r.started_at).toLocaleDateString()} (${r.engine || 'locust'})
+                                    ${r.config_name || r.id} — ${new Date(r.started_at).toLocaleDateString() + ' ' + new Date(r.started_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} (${r.engine || 'locust'})
                                 </option>
                             `)}
                         </select>

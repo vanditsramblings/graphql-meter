@@ -241,7 +241,7 @@ export function AuthProviders() {
                                     <td><span class="badge">${AUTH_TYPE_LABELS[p.auth_type] || p.auth_type}</span></td>
                                     <td class="text-muted">${p.description || '—'}</td>
                                     <td class="text-muted" style="font-size: var(--font-size-xs);">
-                                        ${p.updated_at ? new Date(p.updated_at).toLocaleDateString() : '—'}
+                                        ${p.updated_at ? (() => { const d = new Date(p.updated_at); return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}); })() : '—'}
                                     </td>
                                     <td>
                                         <div class="flex gap-2 justify-end">

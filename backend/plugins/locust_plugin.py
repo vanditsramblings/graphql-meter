@@ -99,7 +99,7 @@ class LocustPlugin(PluginBase):
             if status == "unknown" and run_row:
                 status = run_row["db_status"] or "unknown"
                 # Load ops from DB if engine has none
-                if not ops_array and run_row.get("summary_json"):
+                if not ops_array and run_row["summary_json"]:
                     try:
                         summary = json.loads(run_row["summary_json"]) if isinstance(run_row["summary_json"], str) else run_row["summary_json"]
                         for n, s in summary.get("operations", {}).items():
@@ -149,7 +149,17 @@ class LocustPlugin(PluginBase):
                             except Exception:
                                 errors.append({"message": line})
 
-            return {
+            # Load chart snapshots for completed runs
+            chart_snapshots = None
+            if status in ("completed", "failed") and run_row:
+                try:
+                    cs_row = db.execute("SELECT chart_snapshots FROM test_runs WHERE id = ?", (run_id,)).fetchone()
+                    if cs_row and cs_row["chart_snapshots"]:
+                        chart_snapshots = json.loads(cs_row["chart_snapshots"])
+                except Exception:
+                    pass
+
+            result = {
                 "run_id": raw.get("run_id", run_id),
                 "status": status,
                 "config_name": run_row["name"] if run_row else "",
@@ -161,6 +171,9 @@ class LocustPlugin(PluginBase):
                 "errors": errors,
                 "debug_logs": raw.get("debug_logs", []),
             }
+            if chart_snapshots is not None:
+                result["chart_snapshots"] = chart_snapshots
+            return result
 
         @self.router.get("/runs")
         async def list_runs(request: Request):

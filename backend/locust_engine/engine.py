@@ -258,11 +258,19 @@ def _file_reader(run_id: str):
                     except Exception:
                         pass
                 status = "completed" if proc.returncode == 0 else "failed"
+
+                # Persist chart snapshots (size-optimized: only rps + avg latency per snapshot)
+                chart_data = _build_chart_snapshots(run)
+
                 db.execute(
-                    "UPDATE test_runs SET status=?, completed_at=?, error_log=? WHERE id=?",
-                    (status, now, errors_text, run_id),
+                    "UPDATE test_runs SET status=?, completed_at=?, error_log=?, chart_snapshots=? WHERE id=?",
+                    (status, now, errors_text, chart_data, run_id),
                 )
                 db.commit()
+
+                # Prune old chart data beyond the configurable limit
+                _prune_chart_history(db)
+
                 run["status"] = status
             except Exception:
                 pass
@@ -303,3 +311,53 @@ def _persist_results(run_id: str, final: dict):
         db.commit()
     except Exception as e:
         print(f"[locust_engine] Failed to persist results: {e}")
+
+
+def _build_chart_snapshots(run: dict) -> Optional[str]:
+    """Build a size-optimized JSON string of chart data from stats_deque."""
+    snapshots = list(run.get("stats_deque", []))
+    if not snapshots:
+        return None
+    # Keep only essential fields per snapshot to minimize storage
+    compact = []
+    for s in snapshots:
+        point = {
+            "t": round(s.get("elapsed_sec", 0), 1),
+            "rps": round(s.get("total_rps", 0), 2),
+            "req": s.get("total_requests", 0),
+            "fail": s.get("total_failures", 0),
+            "users": s.get("user_count", 0),
+        }
+        # Per-operation avg latency
+        ops = s.get("operations", {})
+        if ops:
+            lat = {}
+            for name, st in ops.items():
+                lat[name] = round(st.get("avg_response_ms", 0), 1)
+            point["lat"] = lat
+        compact.append(point)
+    return json.dumps(compact, separators=(",", ":"))
+
+
+def _prune_chart_history(db):
+    """Clear chart_snapshots for runs beyond the configurable retention limit."""
+    try:
+        settings = get_settings()
+        limit = settings.CHART_HISTORY_RUNS
+        # Get IDs of runs to keep (most recent N completed/failed runs with chart data)
+        keep_rows = db.execute(
+            "SELECT id FROM test_runs WHERE chart_snapshots IS NOT NULL AND status IN ('completed','failed') "
+            "ORDER BY started_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        keep_ids = {r["id"] for r in keep_rows}
+        if keep_ids:
+            placeholders = ",".join("?" * len(keep_ids))
+            db.execute(
+                f"UPDATE test_runs SET chart_snapshots = NULL "
+                f"WHERE chart_snapshots IS NOT NULL AND id NOT IN ({placeholders})",
+                list(keep_ids),
+            )
+            db.commit()
+    except Exception:
+        pass

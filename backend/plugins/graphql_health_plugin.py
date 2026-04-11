@@ -2,7 +2,6 @@
 
 Provides a simple schema with:
   - Query: health, serviceInfo, echo
-  - Mutation: setMaintenanceMode, resetStats
 
 This serves as:
   1. A self-diagnostic endpoint (the app can test itself)
@@ -32,12 +31,20 @@ _state = {
 HEALTH_SCHEMA = '''type Query {
   health: HealthStatus!
   serviceInfo: ServiceInfo!
-  echo(message: String!): EchoResponse!
+  echo(message: String!, messageInteger: Int, messageDouble: Float, messageUUID: ID, messageTime: String): EchoResponse!
 }
 
 type Mutation {
-  setMaintenanceMode(enabled: Boolean!): MaintenanceResult!
-  resetStats: ResetResult!
+  submitTestData(input: TestDataInput!): TestDataResponse!
+}
+
+input TestDataInput {
+  label: String!
+  count: Int!
+  score: Float!
+  referenceId: ID!
+  scheduledAt: String!
+  active: Boolean!
 }
 
 type HealthStatus {
@@ -57,21 +64,25 @@ type ServiceInfo {
 
 type EchoResponse {
   message: String!
+  messageInteger: Int
+  messageDouble: Float
+  messageUUID: ID
+  messageTime: String
   received_at: String!
   request_number: Int!
 }
 
-type MaintenanceResult {
-  success: Boolean!
-  maintenance_mode: Boolean!
-  message: String!
+type TestDataResponse {
+  id: ID!
+  label: String!
+  count: Int!
+  score: Float!
+  referenceId: ID!
+  scheduledAt: String!
+  active: Boolean!
+  processed_at: String!
 }
 
-type ResetResult {
-  success: Boolean!
-  previous_count: Int!
-  message: String!
-}
 '''
 
 
@@ -110,34 +121,29 @@ def _resolve_query(operation_name: str, variables: dict) -> dict:
             "data": {
                 "echo": {
                     "message": variables.get("message", ""),
+                    "messageInteger": variables.get("messageInteger"),
+                    "messageDouble": variables.get("messageDouble"),
+                    "messageUUID": variables.get("messageUUID"),
+                    "messageTime": variables.get("messageTime"),
                     "received_at": now,
                     "request_number": _state["request_count"],
                 }
             }
         }
 
-    if operation_name in ("setMaintenanceMode", "SetMaintenanceMode"):
-        enabled = variables.get("enabled", False)
-        _state["maintenance_mode"] = bool(enabled)
+    if operation_name in ("submitTestData", "SubmitTestData"):
+        inp = variables.get("input", {})
         return {
             "data": {
-                "setMaintenanceMode": {
-                    "success": True,
-                    "maintenance_mode": _state["maintenance_mode"],
-                    "message": f"Maintenance mode {'enabled' if enabled else 'disabled'}",
-                }
-            }
-        }
-
-    if operation_name in ("resetStats", "ResetStats"):
-        prev = _state["request_count"]
-        _state["request_count"] = 0
-        return {
-            "data": {
-                "resetStats": {
-                    "success": True,
-                    "previous_count": prev,
-                    "message": "Stats reset successfully",
+                "submitTestData": {
+                    "id": f"td-{_state['request_count']}",
+                    "label": inp.get("label", ""),
+                    "count": inp.get("count", 0),
+                    "score": inp.get("score", 0.0),
+                    "referenceId": inp.get("referenceId", ""),
+                    "scheduledAt": inp.get("scheduledAt", ""),
+                    "active": inp.get("active", True),
+                    "processed_at": now,
                 }
             }
         }
@@ -155,7 +161,7 @@ def _parse_query_text(query: str) -> Optional[str]:
     if m:
         return m.group(1)
     # Check for field-level detection
-    for field in ("health", "serviceInfo", "echo", "setMaintenanceMode", "resetStats"):
+    for field in ("health", "serviceInfo", "echo", "submitTestData"):
         if field in query:
             return field
     return None
@@ -190,17 +196,23 @@ def _handle_introspection(query: str) -> dict:
             "fields": [
                 {"name": "health", "args": [], "type": {"kind": "NON_NULL", "name": None, "ofType": {"kind": "OBJECT", "name": "HealthStatus"}}},
                 {"name": "serviceInfo", "args": [], "type": {"kind": "NON_NULL", "name": None, "ofType": {"kind": "OBJECT", "name": "ServiceInfo"}}},
-                {"name": "echo", "args": [{"name": "message", "type": {"kind": "NON_NULL", "name": None, "ofType": {"kind": "SCALAR", "name": "String"}}}],
+                {"name": "echo", "args": [
+                    {"name": "message", "type": {"kind": "NON_NULL", "name": None, "ofType": {"kind": "SCALAR", "name": "String"}}},
+                    {"name": "messageInteger", "type": {"kind": "SCALAR", "name": "Int", "ofType": None}},
+                    {"name": "messageDouble", "type": {"kind": "SCALAR", "name": "Float", "ofType": None}},
+                    {"name": "messageUUID", "type": {"kind": "SCALAR", "name": "ID", "ofType": None}},
+                    {"name": "messageTime", "type": {"kind": "SCALAR", "name": "String", "ofType": None}},
+                ],
                  "type": {"kind": "NON_NULL", "name": None, "ofType": {"kind": "OBJECT", "name": "EchoResponse"}}},
             ],
         },
         {
             "kind": "OBJECT", "name": "Mutation",
             "fields": [
-                {"name": "setMaintenanceMode", "args": [{"name": "enabled", "type": {"kind": "NON_NULL", "name": None, "ofType": {"kind": "SCALAR", "name": "Boolean"}}}],
-                 "type": {"kind": "NON_NULL", "name": None, "ofType": {"kind": "OBJECT", "name": "MaintenanceResult"}}},
-                {"name": "resetStats", "args": [],
-                 "type": {"kind": "NON_NULL", "name": None, "ofType": {"kind": "OBJECT", "name": "ResetResult"}}},
+                {"name": "submitTestData", "args": [
+                    {"name": "input", "type": {"kind": "NON_NULL", "name": None, "ofType": {"kind": "INPUT_OBJECT", "name": "TestDataInput"}}},
+                ],
+                 "type": {"kind": "NON_NULL", "name": None, "ofType": {"kind": "OBJECT", "name": "TestDataResponse"}}},
             ],
         },
     ]
@@ -282,7 +294,7 @@ class GraphQLHealthPlugin(PluginBase):
                     "type": "query",
                     "query": "query health { health { status uptime_seconds request_count maintenance_mode timestamp } }",
                     "enabled": True,
-                    "tps_percentage": 40,
+                    "tps_percentage": 30,
                     "delay_start_sec": 0,
                     "data_range_start": 1,
                     "data_range_end": 100,
@@ -293,7 +305,7 @@ class GraphQLHealthPlugin(PluginBase):
                     "type": "query",
                     "query": "query serviceInfo { serviceInfo { name version environment features } }",
                     "enabled": True,
-                    "tps_percentage": 30,
+                    "tps_percentage": 20,
                     "delay_start_sec": 0,
                     "data_range_start": 1,
                     "data_range_end": 100,
@@ -302,39 +314,32 @@ class GraphQLHealthPlugin(PluginBase):
                 {
                     "name": "echo",
                     "type": "query",
-                    "query": 'query echo($message: String!) { echo(message: $message) { message received_at request_number } }',
+                    "query": "query echo($message: String!, $messageInteger: Int, $messageDouble: Float, $messageUUID: ID, $messageTime: String) { echo(message: $message, messageInteger: $messageInteger, messageDouble: $messageDouble, messageUUID: $messageUUID, messageTime: $messageTime) { message messageInteger messageDouble messageUUID messageTime received_at request_number } }",
                     "enabled": True,
-                    "tps_percentage": 30,
+                    "tps_percentage": 25,
                     "delay_start_sec": 0,
                     "data_range_start": 1,
                     "data_range_end": 100,
                     "variables": [
-                        {"name": "message", "type": "String!", "value": "hello", "required": True},
+                        {"name": "message", "type": "String!", "value": "test-{r}", "required": True},
+                        {"name": "messageInteger", "type": "Int", "value": "{r}", "required": False},
+                        {"name": "messageDouble", "type": "Float", "value": "{r}.5", "required": False},
+                        {"name": "messageUUID", "type": "ID", "value": "uuid-{r}", "required": False},
+                        {"name": "messageTime", "type": "String", "value": "2026-01-01T00:{r}:00Z", "required": False},
                     ],
                 },
                 {
-                    "name": "setMaintenanceMode",
+                    "name": "submitTestData",
                     "type": "mutation",
-                    "query": "mutation setMaintenanceMode($enabled: Boolean!) { setMaintenanceMode(enabled: $enabled) { success maintenance_mode message } }",
-                    "enabled": False,
-                    "tps_percentage": 0,
+                    "query": "mutation submitTestData($input: TestDataInput!) { submitTestData(input: $input) { id label count score referenceId scheduledAt active processed_at } }",
+                    "enabled": True,
+                    "tps_percentage": 25,
                     "delay_start_sec": 0,
                     "data_range_start": 1,
                     "data_range_end": 100,
                     "variables": [
-                        {"name": "enabled", "type": "Boolean!", "value": "false", "required": True},
+                        {"name": "input", "type": "TestDataInput!", "value": {"label": "item-{r}", "count": "{r}", "score": "{r}.99", "referenceId": "ref-{r}", "scheduledAt": "2026-01-01T{r}:00:00Z", "active": True}, "required": True},
                     ],
-                },
-                {
-                    "name": "resetStats",
-                    "type": "mutation",
-                    "query": "mutation resetStats { resetStats { success previous_count message } }",
-                    "enabled": False,
-                    "tps_percentage": 0,
-                    "delay_start_sec": 0,
-                    "data_range_start": 1,
-                    "data_range_end": 100,
-                    "variables": [],
                 },
             ]
 

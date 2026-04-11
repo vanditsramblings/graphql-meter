@@ -61,7 +61,7 @@ class ResultsPlugin(PluginBase):
             if not row:
                 raise HTTPException(404, "Run not found")
             result = dict(row)
-            for key in ("summary_json", "config_snapshot"):
+            for key in ("summary_json", "config_snapshot", "chart_snapshots"):
                 if result.get(key):
                     try:
                         result[key] = json.loads(result[key])

@@ -95,7 +95,7 @@ class K6Plugin(PluginBase):
 
             if status == "unknown" and run_row:
                 status = run_row["db_status"] or "unknown"
-                if not ops_array and run_row.get("summary_json"):
+                if not ops_array and run_row["summary_json"]:
                     try:
                         summary = _json.loads(run_row["summary_json"]) if isinstance(run_row["summary_json"], str) else run_row["summary_json"]
                         for n, s in summary.get("operations", {}).items():
@@ -121,7 +121,30 @@ class K6Plugin(PluginBase):
                             "p95": opr["p95_response_ms"], "p99": opr["p99_response_ms"],
                         })
 
-            return {
+            # Load errors from DB if not in engine cache
+            errors = raw.get("errors", [])
+            if not errors and run_row:
+                error_text = db.execute("SELECT error_log FROM test_runs WHERE id = ?", (run_id,)).fetchone()
+                if error_text and error_text["error_log"]:
+                    for line in error_text["error_log"].strip().split("\n"):
+                        line = line.strip()
+                        if line:
+                            try:
+                                errors.append(_json.loads(line))
+                            except Exception:
+                                errors.append({"message": line})
+
+            # Load chart snapshots for completed runs
+            chart_snapshots = None
+            if status in ("completed", "failed") and run_row:
+                try:
+                    cs_row = db.execute("SELECT chart_snapshots FROM test_runs WHERE id = ?", (run_id,)).fetchone()
+                    if cs_row and cs_row["chart_snapshots"]:
+                        chart_snapshots = _json.loads(cs_row["chart_snapshots"])
+                except Exception:
+                    pass
+
+            result = {
                 "run_id": raw.get("run_id", run_id),
                 "status": status,
                 "config_name": run_row["name"] if run_row else "",
@@ -130,9 +153,12 @@ class K6Plugin(PluginBase):
                 "user_count": latest.get("user_count", 0),
                 "elapsed_sec": latest.get("elapsed_sec", 0),
                 "operations": ops_array,
-                "errors": raw.get("errors", []),
+                "errors": errors,
                 "debug_logs": raw.get("debug_logs", []),
             }
+            if chart_snapshots is not None:
+                result["chart_snapshots"] = chart_snapshots
+            return result
 
         @self.router.get("/runs")
         async def list_runs(request: Request):

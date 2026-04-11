@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     STATS_POLL_INTERVAL_SEC: int = 2
     MAX_ERROR_BUFFER: int = 500
     MAX_RUN_HISTORY: int = 200
+    CHART_HISTORY_RUNS: int = 10  # Number of completed runs to retain full chart data for
 
     # k6
     K6_BINARY_PATH: str = ""
