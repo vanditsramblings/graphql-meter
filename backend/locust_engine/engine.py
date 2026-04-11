@@ -72,7 +72,7 @@ def start_run(config: dict, user: str) -> dict:
         (
             run_id, config.get("config_id"), config.get("name", f"Run {run_id[:8]}"),
             "running", now, gp.get("user_count", 10), gp.get("ramp_up_sec", 10),
-            gp.get("duration_sec", 60), gp.get("host", ""), gp.get("platform", "cloud"),
+            gp.get("duration_sec", 60), gp.get("host", ""), gp.get("platform", ""),
             json.dumps(config), "locust", int(config.get("debug_mode", False)),
             int(config.get("cleanup_on_stop", False)), gp.get("environment_id"), user,
         ),
@@ -96,6 +96,7 @@ def start_run(config: dict, user: str) -> dict:
         "status": "running",
         "stats_deque": deque(maxlen=300),
         "errors": deque(maxlen=500),
+        "debug_logs": deque(maxlen=200),
         "started_at": time.time(),
     }
 
@@ -144,6 +145,7 @@ def get_status(run_id: str) -> dict:
             "latest": latest,
             "history": stats[-60:],  # Last 2 minutes at 2s intervals
             "errors": list(run["errors"])[-20:],
+            "debug_logs": list(run["debug_logs"])[-50:],
         }
 
     # Check filesystem
@@ -182,7 +184,9 @@ def _file_reader(run_id: str):
     stats_path = run_dir / "stats.json"
     errors_path = run_dir / "errors.jsonl"
     done_path = run_dir / "done.json"
+    debug_path = run_dir / "debug.jsonl"
     last_error_pos = 0
+    last_debug_pos = 0
 
     while True:
         time.sleep(2)
@@ -212,6 +216,22 @@ def _file_reader(run_id: str):
             except Exception:
                 pass
 
+        # Read new debug logs
+        if debug_path.exists():
+            try:
+                with open(debug_path) as f:
+                    f.seek(last_debug_pos)
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            try:
+                                run["debug_logs"].append(json.loads(line))
+                            except Exception:
+                                pass
+                    last_debug_pos = f.tell()
+            except Exception:
+                pass
+
         # Check if process ended
         proc = run["process"]
         if proc.poll() is not None:
@@ -238,11 +258,19 @@ def _file_reader(run_id: str):
                     except Exception:
                         pass
                 status = "completed" if proc.returncode == 0 else "failed"
+
+                # Persist chart snapshots (size-optimized: only rps + avg latency per snapshot)
+                chart_data = _build_chart_snapshots(run)
+
                 db.execute(
-                    "UPDATE test_runs SET status=?, completed_at=?, error_log=? WHERE id=?",
-                    (status, now, errors_text, run_id),
+                    "UPDATE test_runs SET status=?, completed_at=?, error_log=?, chart_snapshots=? WHERE id=?",
+                    (status, now, errors_text, chart_data, run_id),
                 )
                 db.commit()
+
+                # Prune old chart data beyond the configurable limit
+                _prune_chart_history(db)
+
                 run["status"] = status
             except Exception:
                 pass
@@ -265,17 +293,71 @@ def _persist_results(run_id: str, final: dict):
             db.execute(
                 "INSERT INTO operation_results (run_id, operation_name, operation_type, request_count, failure_count, "
                 "avg_response_ms, min_response_ms, max_response_ms, p50_response_ms, p90_response_ms, "
-                "p95_response_ms, p99_response_ms, stats_json) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "p95_response_ms, p99_response_ms, total_response_bytes, total_request_bytes, "
+                "avg_response_bytes, avg_request_bytes, stats_json) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     run_id, op_name, "query",
                     op_stats.get("request_count", 0), op_stats.get("failure_count", 0),
                     op_stats.get("avg_response_ms", 0), op_stats.get("min_response_ms", 0),
                     op_stats.get("max_response_ms", 0), op_stats.get("p50_response_ms", 0),
                     op_stats.get("p90_response_ms", 0), op_stats.get("p95_response_ms", 0),
-                    op_stats.get("p99_response_ms", 0), json.dumps(op_stats),
+                    op_stats.get("p99_response_ms", 0),
+                    op_stats.get("total_response_bytes", 0), op_stats.get("total_request_bytes", 0),
+                    op_stats.get("avg_response_bytes", 0), op_stats.get("avg_request_bytes", 0),
+                    json.dumps(op_stats),
                 ),
             )
         db.commit()
     except Exception as e:
         print(f"[locust_engine] Failed to persist results: {e}")
+
+
+def _build_chart_snapshots(run: dict) -> Optional[str]:
+    """Build a size-optimized JSON string of chart data from stats_deque."""
+    snapshots = list(run.get("stats_deque", []))
+    if not snapshots:
+        return None
+    # Keep only essential fields per snapshot to minimize storage
+    compact = []
+    for s in snapshots:
+        point = {
+            "t": round(s.get("elapsed_sec", 0), 1),
+            "rps": round(s.get("total_rps", 0), 2),
+            "req": s.get("total_requests", 0),
+            "fail": s.get("total_failures", 0),
+            "users": s.get("user_count", 0),
+        }
+        # Per-operation avg latency
+        ops = s.get("operations", {})
+        if ops:
+            lat = {}
+            for name, st in ops.items():
+                lat[name] = round(st.get("avg_response_ms", 0), 1)
+            point["lat"] = lat
+        compact.append(point)
+    return json.dumps(compact, separators=(",", ":"))
+
+
+def _prune_chart_history(db):
+    """Clear chart_snapshots for runs beyond the configurable retention limit."""
+    try:
+        settings = get_settings()
+        limit = settings.CHART_HISTORY_RUNS
+        # Get IDs of runs to keep (most recent N completed/failed runs with chart data)
+        keep_rows = db.execute(
+            "SELECT id FROM test_runs WHERE chart_snapshots IS NOT NULL AND status IN ('completed','failed') "
+            "ORDER BY started_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        keep_ids = {r["id"] for r in keep_rows}
+        if keep_ids:
+            placeholders = ",".join("?" * len(keep_ids))
+            db.execute(
+                f"UPDATE test_runs SET chart_snapshots = NULL "
+                f"WHERE chart_snapshots IS NOT NULL AND id NOT IN ({placeholders})",
+                list(keep_ids),
+            )
+            db.commit()
+    except Exception:
+        pass

@@ -61,6 +61,36 @@ def generate_script(config: dict) -> str:
         '',
     ]
 
+    # Check if any operation has dict variables with {r} — need _resolve helper
+    needs_resolve = any(
+        isinstance(v.get("value", v.get("default_value", "")), dict) and "{r}" in json.dumps(v.get("value", v.get("default_value", "")))
+        for op in operations for v in op.get("variables", [])
+    )
+
+    if needs_resolve:
+        lines.extend([
+            '// Resolve {r} placeholders in nested objects with type coercion',
+            'function _resolve(obj, rVal) {',
+            '  if (typeof obj === "string") {',
+            '    if (obj.indexOf("{r}") === -1) return obj;',
+            '    const s = obj.replace(/\\{r\\}/g, rVal);',
+            '    const i = parseInt(s, 10);',
+            '    if (String(i) === s) return i;',
+            '    const f = parseFloat(s);',
+            '    if (!isNaN(f) && s.indexOf(".") !== -1) return f;',
+            '    return s;',
+            '  }',
+            '  if (Array.isArray(obj)) return obj.map(v => _resolve(v, rVal));',
+            '  if (obj && typeof obj === "object") {',
+            '    const out = {};',
+            '    for (const [k, v] of Object.entries(obj)) out[k] = _resolve(v, rVal);',
+            '    return out;',
+            '  }',
+            '  return obj;',
+            '}',
+            '',
+        ])
+
     # Generate exec functions
     for op in operations:
         name = op["name"]
@@ -81,12 +111,35 @@ def generate_script(config: dict) -> str:
         vars_lines = []
         for k, v in variables.items():
             if isinstance(v, str) and "{r}" in v:
-                vars_lines.append(f'    "{k}": `{v.replace("{r}", "${rVal}")}`')
+                replaced_expr = v.replace("{r}", "${rVal}")
+                # Check if the value resolves to a pure number pattern
+                stripped = v.replace("{r}", "1")
+                try:
+                    int(stripped)
+                    # Pure integer pattern like "{r}" or "10{r}"
+                    vars_lines.append(f'    "{k}": parseInt(`{replaced_expr}`, 10)')
+                    continue
+                except ValueError:
+                    pass
+                try:
+                    float(stripped)
+                    if "." in stripped:
+                        # Float pattern like "{r}.5" or "{r}.99"
+                        vars_lines.append(f'    "{k}": parseFloat(`{replaced_expr}`)')
+                        continue
+                except ValueError:
+                    pass
+                # String with placeholder
+                vars_lines.append(f'    "{k}": `{replaced_expr}`')
             elif isinstance(v, str):
                 vars_lines.append(f'    "{k}": "{v}"')
             elif isinstance(v, dict):
-                v_str = json.dumps(v).replace("{r}", "${rVal}")
-                vars_lines.append(f'    "{k}": JSON.parse(`{v_str}`)')
+                v_str = json.dumps(v)
+                if "{r}" in v_str:
+                    # Build object with typed resolution
+                    vars_lines.append(f'    "{k}": _resolve({json.dumps(v)}, rVal)')
+                else:
+                    vars_lines.append(f'    "{k}": {json.dumps(v)}')
             else:
                 vars_lines.append(f'    "{k}": {json.dumps(v)}')
 

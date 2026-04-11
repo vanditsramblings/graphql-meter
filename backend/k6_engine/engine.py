@@ -92,7 +92,7 @@ def start_run(config: dict, user: str) -> dict:
         (
             run_id, config.get("config_id"), config.get("name", f"k6 Run {run_id[:8]}"),
             "running", now, gp.get("user_count", 10), gp.get("ramp_up_sec", 10),
-            gp.get("duration_sec", 60), gp.get("host", ""), gp.get("platform", "cloud"),
+            gp.get("duration_sec", 60), gp.get("host", ""), gp.get("platform", ""),
             json.dumps(config), "k6", int(config.get("debug_mode", False)),
             int(config.get("cleanup_on_stop", False)), gp.get("environment_id"), user,
         ),
@@ -101,10 +101,10 @@ def start_run(config: dict, user: str) -> dict:
 
     # Spawn k6 subprocess
     proc = subprocess.Popen(
-        [k6_binary, "run", "--out", f"json={metrics_path}", str(script_path)],
+        [k6_binary, "run", "--out", f"json={metrics_path.resolve()}", str(script_path.resolve())],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        cwd=str(run_dir),
+        cwd=str(run_dir.resolve()),
     )
 
     run_info = {
@@ -193,6 +193,7 @@ def _metric_reader(run_id: str):
                                 op_stats[name] = {
                                     "request_count": 0, "failure_count": 0,
                                     "total_ms": 0, "min_ms": float("inf"), "max_ms": 0,
+                                    "total_response_bytes": 0, "total_request_bytes": 0,
                                 }
 
                             if metric == "http_req_duration":
@@ -203,6 +204,12 @@ def _metric_reader(run_id: str):
 
                             elif metric == "http_req_failed" and value == 1:
                                 op_stats[name]["failure_count"] += 1
+
+                            elif metric == "http_req_receiving":
+                                op_stats[name]["total_response_bytes"] += int(value)
+
+                            elif metric == "http_req_sending":
+                                op_stats[name]["total_request_bytes"] += int(value)
 
                         except Exception:
                             pass
@@ -231,6 +238,10 @@ def _metric_reader(run_id: str):
                 "min_response_ms": round(st["min_ms"], 2) if st["min_ms"] != float("inf") else 0,
                 "max_response_ms": round(st["max_ms"], 2),
                 "tps_actual": round(cnt / elapsed, 2),
+                "total_response_bytes": st.get("total_response_bytes", 0),
+                "total_request_bytes": st.get("total_request_bytes", 0),
+                "avg_response_bytes": round(st.get("total_response_bytes", 0) / cnt, 0) if cnt > 0 else 0,
+                "avg_request_bytes": round(st.get("total_request_bytes", 0) / cnt, 0) if cnt > 0 else 0,
             }
             snapshot["total_requests"] += cnt
             snapshot["total_failures"] += st["failure_count"]
@@ -257,9 +268,13 @@ def _metric_reader(run_id: str):
                     pass
 
                 status = "completed" if proc.returncode == 0 else "failed"
+
+                # Build chart snapshots
+                chart_data = _build_chart_snapshots(run)
+
                 db.execute(
-                    "UPDATE test_runs SET status=?, completed_at=?, summary_json=?, error_log=? WHERE id=?",
-                    (status, now_str, final_summary, stderr_output, run_id),
+                    "UPDATE test_runs SET status=?, completed_at=?, summary_json=?, error_log=?, chart_snapshots=? WHERE id=?",
+                    (status, now_str, final_summary, stderr_output, chart_data, run_id),
                 )
 
                 for name, st in op_stats.items():
@@ -267,12 +282,65 @@ def _metric_reader(run_id: str):
                     avg = round(st["total_ms"] / cnt, 2) if cnt > 0 else 0
                     db.execute(
                         "INSERT INTO operation_results (run_id, operation_name, operation_type, request_count, failure_count, "
-                        "avg_response_ms, min_response_ms, max_response_ms) VALUES (?,?,?,?,?,?,?,?)",
+                        "avg_response_ms, min_response_ms, max_response_ms, total_response_bytes, total_request_bytes, "
+                        "avg_response_bytes, avg_request_bytes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                         (run_id, name, "query", cnt, st["failure_count"], avg,
                          round(st["min_ms"], 2) if st["min_ms"] != float("inf") else 0,
-                         round(st["max_ms"], 2)),
+                         round(st["max_ms"], 2),
+                         st.get("total_response_bytes", 0), st.get("total_request_bytes", 0),
+                         round(st.get("total_response_bytes", 0) / cnt, 0) if cnt > 0 else 0,
+                         round(st.get("total_request_bytes", 0) / cnt, 0) if cnt > 0 else 0),
                     )
                 db.commit()
+
+                # Prune old chart data
+                _prune_chart_history(db)
             except Exception as e:
                 print(f"[k6_engine] Failed to persist results: {e}")
             break
+
+
+def _build_chart_snapshots(run: dict) -> str | None:
+    """Build a size-optimized JSON string of chart data from stats_deque."""
+    snapshots = list(run.get("stats_deque", []))
+    if not snapshots:
+        return None
+    compact = []
+    for s in snapshots:
+        point = {
+            "t": round(s.get("elapsed_sec", 0), 1),
+            "rps": round(s.get("total_rps", 0), 2),
+            "req": s.get("total_requests", 0),
+            "fail": s.get("total_failures", 0),
+        }
+        ops = s.get("operations", {})
+        if ops:
+            lat = {}
+            for name, st in ops.items():
+                lat[name] = round(st.get("avg_response_ms", 0), 1)
+            point["lat"] = lat
+        compact.append(point)
+    return json.dumps(compact, separators=(",", ":"))
+
+
+def _prune_chart_history(db):
+    """Clear chart_snapshots for runs beyond the configurable retention limit."""
+    try:
+        settings = get_settings()
+        limit = settings.CHART_HISTORY_RUNS
+        keep_rows = db.execute(
+            "SELECT id FROM test_runs WHERE chart_snapshots IS NOT NULL AND status IN ('completed','failed') "
+            "ORDER BY started_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        keep_ids = {r["id"] for r in keep_rows}
+        if keep_ids:
+            placeholders = ",".join("?" * len(keep_ids))
+            db.execute(
+                f"UPDATE test_runs SET chart_snapshots = NULL "
+                f"WHERE chart_snapshots IS NOT NULL AND id NOT IN ({placeholders})",
+                list(keep_ids),
+            )
+            db.commit()
+    except Exception:
+        pass

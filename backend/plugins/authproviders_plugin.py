@@ -280,6 +280,76 @@ def _generate_custom_jwt(config: dict) -> Optional[dict]:
     return {"Authorization": f"Bearer {token}"}
 
 
+# ---------- Token cache for load test execution ----------
+
+import threading
+import time as _time
+
+_token_cache = {}  # provider_id -> {"headers": dict, "expires_at": float}
+_token_cache_lock = threading.Lock()
+
+
+def get_cached_auth_header(provider_id: str) -> Optional[dict]:
+    """Get auth headers with caching and auto-refresh for load tests.
+
+    For token-based auth types (OAuth2, JWT), tokens are cached and
+    automatically refreshed before expiry. The refresh buffer is configurable
+    per auth provider.
+    """
+    now = _time.time()
+
+    with _token_cache_lock:
+        cached = _token_cache.get(provider_id)
+        if cached and cached["expires_at"] > now:
+            return cached["headers"]
+
+    # Cache miss or expired — resolve fresh headers
+    db = get_db()
+    row = db.execute("SELECT auth_type, config_encrypted FROM auth_providers WHERE id = ?", (provider_id,)).fetchone()
+    if not row:
+        return None
+
+    try:
+        config = json.loads(_decrypt(row["config_encrypted"]))
+    except Exception:
+        return None
+
+    auth_type = row["auth_type"]
+    headers = get_auth_header(provider_id)
+    if not headers:
+        return None
+
+    # Determine cache TTL based on auth type
+    if auth_type in ("oauth2_client_credentials", "oauth2_password"):
+        buffer = int(config.get("token_refresh_buffer_sec", 60))
+        # Default token lifetime assumed: 3600s minus buffer
+        ttl = 3600 - buffer
+    elif auth_type == "jwt_custom":
+        expiry_sec = int(config.get("expiry_sec", 3600))
+        ttl = max(expiry_sec - 60, 30)  # refresh 60s before expiry
+    elif auth_type in ("bearer_token", "basic", "api_key"):
+        ttl = 3600  # Static credentials, cache for 1hr
+    else:
+        ttl = 300
+
+    with _token_cache_lock:
+        _token_cache[provider_id] = {
+            "headers": headers,
+            "expires_at": now + ttl,
+        }
+
+    return headers
+
+
+def clear_token_cache(provider_id: Optional[str] = None):
+    """Clear cached tokens. If provider_id given, clear only that one."""
+    with _token_cache_lock:
+        if provider_id:
+            _token_cache.pop(provider_id, None)
+        else:
+            _token_cache.clear()
+
+
 # ---------- Plugin ----------
 
 class AuthProviderSaveRequest(BaseModel):
@@ -375,6 +445,7 @@ class AuthProvidersPlugin(PluginBase):
                         (body.name, body.auth_type, encrypted, body.description, now, body.id),
                     )
                     db.commit()
+                    clear_token_cache(body.id)
                     return {"id": body.id, "status": "updated"}
 
             provider_id = str(uuid.uuid4())
@@ -395,6 +466,7 @@ class AuthProvidersPlugin(PluginBase):
                 raise HTTPException(404, "Auth provider not found")
             db.execute("DELETE FROM auth_providers WHERE id = ?", (provider_id,))
             db.commit()
+            clear_token_cache(provider_id)
             return {"status": "deleted"}
 
         @self.router.post("/test")
@@ -449,3 +521,14 @@ class AuthProvidersPlugin(PluginBase):
             # Mask the values for API response
             masked = {k: _mask(v) for k, v in headers.items()}
             return {"headers": masked}
+
+        @self.router.post("/{provider_id}/refresh")
+        async def refresh_token(provider_id: str, request: Request):
+            """Force refresh cached token for a provider."""
+            require_role(request, "maintainer")
+            clear_token_cache(provider_id)
+            headers = get_cached_auth_header(provider_id)
+            if headers is None:
+                raise HTTPException(400, "Failed to refresh auth headers")
+            masked = {k: _mask(v) for k, v in headers.items()}
+            return {"headers": masked, "status": "refreshed"}

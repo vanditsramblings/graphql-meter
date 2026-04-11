@@ -37,8 +37,19 @@ _SMART_DEFAULTS = {
     "limit": 10,
     "page": 1,
     "query": "test",
+    "message": "test-{r}",
+    "messageinteger": "{r}",
+    "messagedouble": "{r}.5",
+    "messageuuid": "uuid-{r}",
+    "messagetime": "2026-01-01T00:{r}:00Z",
     "category": "general",
     "status": "ACTIVE",
+    "label": "item-{r}",
+    "count": "{r}",
+    "score": "{r}.99",
+    "referenceid": "ref-{r}",
+    "scheduledat": "2026-01-01T{r}:00:00Z",
+    "active": True,
 }
 
 _TYPE_DEFAULTS = {

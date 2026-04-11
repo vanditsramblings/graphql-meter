@@ -28,6 +28,7 @@ def run_worker(run_dir: str):
     errors_path = run_path / "errors.jsonl"
     done_path = run_path / "done.json"
     stop_path = run_path / "stop"
+    debug_log_path = run_path / "debug.jsonl"
 
     with open(config_path) as f:
         config = json.load(f)
@@ -43,6 +44,33 @@ def run_worker(run_dir: str):
     auth_headers = config.get("auth_headers", {})
 
     url = f"{host.rstrip('/')}{graphql_path}"
+
+    def _resolve_placeholder(value, r_val):
+        """Resolve {r} placeholders in a value, coercing types where possible."""
+        if isinstance(value, str) and "{r}" in value:
+            replaced = value.replace("{r}", str(r_val))
+            # If the entire value is just the number, try numeric coercion
+            try:
+                if replaced == str(int(replaced)):
+                    return int(replaced)
+            except (ValueError, OverflowError):
+                pass
+            try:
+                float(replaced)
+                if "." in replaced:
+                    return float(replaced)
+            except (ValueError, OverflowError):
+                pass
+            return replaced
+        if isinstance(value, dict):
+            return {k: _resolve_placeholder(v, r_val) for k, v in value.items()}
+        if isinstance(value, list):
+            return [_resolve_placeholder(item, r_val) for item in value]
+        return value
+
+    def _resolve_variables(vars_dict, r_val):
+        """Resolve all {r} placeholders in a variables dictionary."""
+        return {k: _resolve_placeholder(v, r_val) for k, v in vars_dict.items()}
 
     # Build dynamic HttpUser
     from locust import HttpUser, task, constant_pacing
@@ -71,14 +99,7 @@ def run_worker(run_dir: str):
                 r_val = rng["current"]
                 rng["current"] = rng["current"] + 1 if rng["current"] < rng["end"] else rng["start"]
 
-                resolved_vars = {}
-                for k, v in vars_.items():
-                    if isinstance(v, str) and "{r}" in v:
-                        resolved_vars[k] = v.replace("{r}", str(r_val))
-                    elif isinstance(v, dict):
-                        resolved_vars[k] = json.loads(json.dumps(v).replace("{r}", str(r_val)))
-                    else:
-                        resolved_vars[k] = v
+                resolved_vars = _resolve_variables(vars_, r_val)
 
                 payload = {"query": q, "variables": resolved_vars}
                 headers = {"Content-Type": "application/json"}
@@ -88,11 +109,17 @@ def run_worker(run_dir: str):
                     url, json=payload, headers=headers,
                     name=name, catch_response=True
                 ) as response:
+                    resp_body = None
+                    # Track request/response sizes
+                    req_size = len(json.dumps(payload).encode('utf-8'))
+                    resp_size = len(response.content) if hasattr(response, 'content') else 0
+                    _track_size(name, req_size, resp_size)
+
                     if response.status_code == 200:
                         try:
-                            body = response.json()
-                            if "errors" in body:
-                                msg = body["errors"][0].get("message", "GraphQL error")
+                            resp_body = response.json()
+                            if "errors" in resp_body:
+                                msg = resp_body["errors"][0].get("message", "GraphQL error")
                                 response.failure(msg)
                                 _log_error(name, msg, response.status_code)
                         except Exception:
@@ -100,6 +127,14 @@ def run_worker(run_dir: str):
                     else:
                         response.failure(f"HTTP {response.status_code}")
                         _log_error(name, f"HTTP {response.status_code}", response.status_code)
+                        try:
+                            resp_body = response.text[:2000]
+                        except Exception:
+                            pass
+
+                    # Debug logging: full request/response
+                    if debug_mode:
+                        _log_debug(name, payload, response.status_code, resp_body, response.elapsed.total_seconds() * 1000 if hasattr(response, 'elapsed') else 0)
 
             op_task.__name__ = name
             return op_task
@@ -108,6 +143,15 @@ def run_worker(run_dir: str):
 
     # Error logging
     error_count = [0]
+    # Size tracking per operation
+    size_stats = {}
+
+    def _track_size(op_name, req_bytes, resp_bytes):
+        if op_name not in size_stats:
+            size_stats[op_name] = {"total_req": 0, "total_resp": 0, "count": 0}
+        size_stats[op_name]["total_req"] += req_bytes
+        size_stats[op_name]["total_resp"] += resp_bytes
+        size_stats[op_name]["count"] += 1
 
     def _log_error(op_name, message, status_code):
         if error_count[0] >= 500:
@@ -116,6 +160,34 @@ def run_worker(run_dir: str):
         entry = {"timestamp": time.time(), "operation": op_name, "message": message, "status_code": status_code}
         try:
             with open(errors_path, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except Exception:
+            pass
+
+    # Debug logging
+    debug_count = [0]
+
+    def _log_debug(op_name, request_payload, status_code, response_body, latency_ms):
+        if debug_count[0] >= 1000:
+            return
+        debug_count[0] += 1
+        # Redact auth headers
+        entry = {
+            "timestamp": time.time(),
+            "operation": op_name,
+            "request": {
+                "url": url,
+                "method": "POST",
+                "body": request_payload,
+            },
+            "response": {
+                "status_code": status_code,
+                "body": response_body if isinstance(response_body, (dict, list)) else str(response_body)[:2000] if response_body else None,
+                "latency_ms": round(latency_ms, 2),
+            },
+        }
+        try:
+            with open(debug_log_path, "a") as f:
                 f.write(json.dumps(entry) + "\n")
         except Exception:
             pass
@@ -155,6 +227,7 @@ def run_worker(run_dir: str):
             }
 
             for entry in env.runner.stats.entries.values():
+                ss = size_stats.get(entry.name, {"total_req": 0, "total_resp": 0, "count": 0})
                 stats_data["operations"][entry.name] = {
                     "request_count": entry.num_requests,
                     "failure_count": entry.num_failures,
@@ -166,6 +239,10 @@ def run_worker(run_dir: str):
                     "p95_response_ms": round(entry.get_response_time_percentile(0.95) or 0, 2),
                     "p99_response_ms": round(entry.get_response_time_percentile(0.99) or 0, 2),
                     "tps_actual": round(entry.current_rps, 2) if hasattr(entry, 'current_rps') else 0,
+                    "total_response_bytes": ss["total_resp"],
+                    "total_request_bytes": ss["total_req"],
+                    "avg_response_bytes": round(ss["total_resp"] / ss["count"], 0) if ss["count"] > 0 else 0,
+                    "avg_request_bytes": round(ss["total_req"] / ss["count"], 0) if ss["count"] > 0 else 0,
                 }
                 stats_data["total_requests"] += entry.num_requests
                 stats_data["total_failures"] += entry.num_failures
@@ -211,6 +288,7 @@ def run_worker(run_dir: str):
         "operations": {},
     }
     for entry in env.runner.stats.entries.values():
+        ss = size_stats.get(entry.name, {"total_req": 0, "total_resp": 0, "count": 0})
         final["operations"][entry.name] = {
             "request_count": entry.num_requests,
             "failure_count": entry.num_failures,
@@ -221,6 +299,10 @@ def run_worker(run_dir: str):
             "p90_response_ms": round(entry.get_response_time_percentile(0.9) or 0, 2),
             "p95_response_ms": round(entry.get_response_time_percentile(0.95) or 0, 2),
             "p99_response_ms": round(entry.get_response_time_percentile(0.99) or 0, 2),
+            "total_response_bytes": ss["total_resp"],
+            "total_request_bytes": ss["total_req"],
+            "avg_response_bytes": round(ss["total_resp"] / ss["count"], 0) if ss["count"] > 0 else 0,
+            "avg_request_bytes": round(ss["total_req"] / ss["count"], 0) if ss["count"] > 0 else 0,
         }
 
     try:
