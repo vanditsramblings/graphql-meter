@@ -151,7 +151,7 @@ fragment TypeRef on __Type {
 
 
 def _resolve_target(env_id: str = "", target_url: str = "", auth_provider_id: str = "",
-                     extra_headers: dict = None, verify_ssl: bool = True) -> dict:
+                     extra_headers: Optional[dict] = None, verify_ssl: bool = True) -> dict:
     """Resolve environment or direct URL to connection params."""
     result = {
         "url": target_url,
@@ -417,7 +417,7 @@ class GraphQLClientPlugin(PluginBase):
 
         @self.router.get("/requests/list")
         async def list_requests(request: Request):
-            """List saved GraphQL requests."""
+            """List saved GraphQL requests and explicit folders."""
             require_auth(request)
             db = get_db()
             rows = db.execute(
@@ -425,7 +425,11 @@ class GraphQLClientPlugin(PluginBase):
                 "config_id, operation_name, query, created_by, created_at, updated_at "
                 "FROM graphql_requests ORDER BY folder_name, updated_at DESC"
             ).fetchall()
-            return {"requests": [dict(r) for r in rows]}
+            folders = db.execute("SELECT id, path, created_at FROM graphql_folders ORDER BY path").fetchall()
+            return {
+                "requests": [dict(r) for r in rows],
+                "folders": [dict(f) for f in folders],
+            }
 
         @self.router.get("/requests/{request_id}")
         async def get_request(request_id: str, request: Request):
@@ -701,31 +705,77 @@ class GraphQLClientPlugin(PluginBase):
 
             return {"format": "postman", "content": json.dumps(collection, indent=2)}
 
+        @self.router.post("/folders/create")
+        async def create_folder(request: Request, body: dict):
+            """Create an explicit folder (supports nested paths like 'Auth/OAuth2')."""
+            user = require_role(request, "maintainer")
+            folder_path = body.get("path", "").strip().strip("/")
+            if not folder_path:
+                raise HTTPException(400, "path is required")
+            db = get_db()
+            now = datetime.now(timezone.utc).isoformat()
+            # Ensure all ancestor folders exist
+            parts = folder_path.split("/")
+            for i in range(1, len(parts) + 1):
+                ancestor = "/".join(parts[:i])
+                existing = db.execute("SELECT id FROM graphql_folders WHERE path = ?", (ancestor,)).fetchone()
+                if not existing:
+                    db.execute(
+                        "INSERT INTO graphql_folders (id, path, created_by, created_at) VALUES (?,?,?,?)",
+                        (str(uuid.uuid4()), ancestor, user["username"], now),
+                    )
+            db.commit()
+            return {"status": "created", "path": folder_path}
+
         @self.router.post("/folders/rename")
         async def rename_folder(request: Request, body: dict):
-            """Rename a folder (updates all requests in that folder)."""
+            """Rename a folder (updates all requests and sub-folders with matching prefix)."""
             require_role(request, "maintainer")
-            old_name = body.get("old_name", "").strip()
-            new_name = body.get("new_name", "").strip()
+            old_name = body.get("old_name", "").strip().strip("/")
+            new_name = body.get("new_name", "").strip().strip("/")
             if not old_name or not new_name:
                 raise HTTPException(400, "Both old_name and new_name are required")
             db = get_db()
+            # Rename exact match and children for requests
             db.execute(
                 "UPDATE graphql_requests SET folder_name = ? WHERE folder_name = ?",
                 (new_name, old_name),
             )
+            # Rename children: old_name/child -> new_name/child
+            prefix = old_name + "/"
+            rows = db.execute(
+                "SELECT id, folder_name FROM graphql_requests WHERE folder_name LIKE ?",
+                (prefix + "%",),
+            ).fetchall()
+            for r in rows:
+                new_folder = new_name + "/" + r["folder_name"][len(prefix):]
+                db.execute("UPDATE graphql_requests SET folder_name = ? WHERE id = ?", (new_folder, r["id"]))
+
+            # Rename the folder record and children
+            db.execute("UPDATE graphql_folders SET path = ? WHERE path = ?", (new_name, old_name))
+            folder_rows = db.execute("SELECT id, path FROM graphql_folders WHERE path LIKE ?", (prefix + "%",)).fetchall()
+            for f in folder_rows:
+                new_path = new_name + "/" + f["path"][len(prefix):]
+                db.execute("UPDATE graphql_folders SET path = ? WHERE id = ?", (new_path, f["id"]))
+
             db.commit()
             return {"status": "renamed", "old_name": old_name, "new_name": new_name}
 
         @self.router.post("/folders/delete")
         async def delete_folder(request: Request, body: dict):
-            """Delete a folder and all its requests."""
+            """Delete a folder, its sub-folders, and all contained requests."""
             require_role(request, "maintainer")
-            folder_name = body.get("folder_name", "").strip()
+            folder_name = body.get("folder_name", "").strip().strip("/")
             if not folder_name:
                 raise HTTPException(400, "folder_name is required")
             db = get_db()
+            prefix = folder_name + "/"
+            # Delete requests in this folder and sub-folders
             db.execute("DELETE FROM graphql_requests WHERE folder_name = ?", (folder_name,))
+            db.execute("DELETE FROM graphql_requests WHERE folder_name LIKE ?", (prefix + "%",))
+            # Delete folder records
+            db.execute("DELETE FROM graphql_folders WHERE path = ?", (folder_name,))
+            db.execute("DELETE FROM graphql_folders WHERE path LIKE ?", (prefix + "%",))
             db.commit()
             return {"status": "deleted", "folder_name": folder_name}
 
@@ -739,9 +789,9 @@ def _format_type_ref(type_ref: dict) -> str:
     of_type = type_ref.get("ofType")
 
     if kind == "NON_NULL":
-        return f"{_format_type_ref(of_type)}!"
+        return f"{_format_type_ref(of_type or {})}!"
     elif kind == "LIST":
-        return f"[{_format_type_ref(of_type)}]"
+        return f"[{_format_type_ref(of_type or {})}]"
     elif name:
         return name
     return "Unknown"

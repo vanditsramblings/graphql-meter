@@ -1,0 +1,17 @@
+apiVersion: v2
+name: graphql-meter
+description: Schema-driven GraphQL performance testing platform
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - graphql
+  - performance
+  - load-testing
+  - locust
+  - k6
+home: https://github.com/vanditsramblings/graphql-meter
+sources:
+  - https://github.com/vanditsramblings/graphql-meter
+maintainers:
+  - name: vanditsramblings

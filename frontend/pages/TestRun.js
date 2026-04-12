@@ -13,6 +13,7 @@ import { StatusBadge } from '../components/StatusBadge.js';
 import { LiveChart } from '../components/LiveChart.js';
 import { ErrorLog } from '../components/ErrorLog.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
+import { Icon } from '../components/Icons.js';
 
 const html = htm.bind(h);
 
@@ -28,12 +29,13 @@ export function TestRun() {
     const [loading, setLoading] = useState(true);
     const [showStop, setShowStop] = useState(false);
     const [stopping, setStopping] = useState(false);
-    const [rpsData, setRpsData] = useState([]);
-    const [latencyData, setLatencyData] = useState([]);
+    const [chartSnapshots, setChartSnapshots] = useState([]);
     const [activeTab, setActiveTab] = useState('stats');
+    const [configDuration, setConfigDuration] = useState(0);
     const pollRef = useRef(null);
     const runId = params?.id;
     const engine = params?.engine || 'locust';
+    const isK6 = engine === 'k6';
 
     const fetchStatus = async () => {
         if (!runId) return;
@@ -42,23 +44,17 @@ export function TestRun() {
             if (res) {
                 setStatus(res);
 
-                // If chart_snapshots available (historical run), reconstruct chart data
-                if (res.chart_snapshots && res.chart_snapshots.length > 0 && rpsData.length === 0) {
-                    const rps = res.chart_snapshots.map(s => ({ time: s.t * 1000, value: s.rps || 0 }));
-                    const lat = res.chart_snapshots.map(s => {
-                        const latencies = s.lat ? Object.values(s.lat) : [];
-                        const avg = latencies.length > 0 ? latencies.reduce((a, b) => a + b, 0) / latencies.length : 0;
-                        return { time: s.t * 1000, value: avg };
-                    });
-                    setRpsData(rps);
-                    setLatencyData(lat);
-                } else if (!res.chart_snapshots) {
-                    // Live run — append chart data
-                    const ts = Date.now();
-                    const totalRps = (res.operations || []).reduce((s, o) => s + (o.rps || 0), 0);
-                    const avgLat = (res.operations || []).reduce((s, o) => s + (o.avg_response_time || 0), 0) / Math.max((res.operations || []).length, 1);
-                    setRpsData(prev => [...prev.slice(-120), { time: ts, value: totalRps }]);
-                    setLatencyData(prev => [...prev.slice(-120), { time: ts, value: avgLat }]);
+                // Extract configured duration for chart x-axis range
+                if (configDuration === 0 && res.started_at) {
+                    try {
+                        const runMeta = await apiGet('/api/results/runs/' + runId);
+                        if (runMeta?.duration_sec) setConfigDuration(runMeta.duration_sec);
+                    } catch (e) { /* ignore */ }
+                }
+
+                // Chart snapshots come from the API (either engine deque for running or DB for completed)
+                if (res.chart_snapshots && res.chart_snapshots.length > 0) {
+                    setChartSnapshots(res.chart_snapshots);
                 }
 
                 if (res.status === 'completed' || res.status === 'failed' || res.status === 'stopped') {
@@ -157,15 +153,13 @@ export function TestRun() {
                 </div>
             `}
 
-            <!-- Charts Row -->
-            <div class="form-row" style="margin-bottom: var(--space-4);">
-                <div class="card" style="flex: 1;">
-                    <h3 style="margin-bottom: var(--space-2); font-size: var(--font-size-sm);">Requests/sec</h3>
-                    <${LiveChart} data=${rpsData} color="var(--color-primary)" height=${160} />
+            <!-- Charts (full-width, stacked, per-operation lines) -->
+            <div style="margin-bottom: var(--space-4);">
+                <div class="card" style="margin-bottom: var(--space-3);">
+                    <${LiveChart} snapshots=${chartSnapshots} field="op_rps" label="Requests / sec" unit="rps" maxDuration=${configDuration} height=${260} chartId="rps" />
                 </div>
-                <div class="card" style="flex: 1;">
-                    <h3 style="margin-bottom: var(--space-2); font-size: var(--font-size-sm);">Avg Latency (ms)</h3>
-                    <${LiveChart} data=${latencyData} color="var(--color-warning)" height=${160} />
+                <div class="card">
+                    <${LiveChart} snapshots=${chartSnapshots} field="lat" label="Avg Latency" unit="ms" maxDuration=${configDuration} height=${260} chartId="latency" />
                 </div>
             </div>
 
@@ -182,7 +176,8 @@ export function TestRun() {
                 ${status.debug_mode && html`
                     <button class=${`tab ${activeTab === 'debug' ? 'active' : ''}`}
                         onClick=${() => setActiveTab('debug')}>
-                        Debug Logs ${(status.debug_logs || []).length > 0 ? '(' + (status.debug_logs || []).length + ')' : ''}
+                        Debug Logs ${isK6 ? '' : (status.debug_logs || []).length > 0 ? '(' + (status.debug_logs || []).length + ')' : ''}
+                        ${isK6 && html`<span class="info-tooltip-inline" data-tooltip="Debug logs are not available for k6 engine. k6 runs as a compiled binary and does not expose per-request details.">ⓘ</span>`}
                     </button>
                 `}
             </div>
@@ -252,7 +247,15 @@ export function TestRun() {
 
             ${activeTab === 'debug' && status.debug_mode && html`
                 <div class="card" style="margin-bottom: var(--space-4);">
-                    ${(status.debug_logs || []).length === 0 ? html`
+                    ${isK6 ? html`
+                        <div class="empty-state" style="padding: var(--space-4);">
+                            <div class="text-muted">
+                                <${Icon} name="info" size=${16} style=${{marginRight: '4px', verticalAlign: 'middle'}} />
+                                Debug logs are not available for k6 engine. k6 runs as a compiled Go binary and does not expose per-request details like Locust does.
+                            </div>
+                        </div>
+                    ` : html`
+                        ${(status.debug_logs || []).length === 0 ? html`
                         <div class="empty-state" style="padding: var(--space-4);">
                             <div class="text-muted">No debug logs yet. ${isRunning ? 'Waiting for requests...' : ''}</div>
                         </div>
@@ -283,6 +286,7 @@ export function TestRun() {
                                 </div>
                             `)}
                         </div>
+                    `}
                     `}
                 </div>
             `}

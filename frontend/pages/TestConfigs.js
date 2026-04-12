@@ -5,7 +5,7 @@
  * Step 3: Review + engine selector + save/start
  */
 import { h } from 'preact';
-import { useState, useEffect } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import htm from 'htm';
 import { apiGet, apiPost, apiDelete } from '../lib/api.js';
 import { useAuth } from '../lib/auth.js';
@@ -21,6 +21,45 @@ import { Accordion } from '../components/Accordion.js';
 import { StatusBadge } from '../components/StatusBadge.js';
 
 const html = htm.bind(h);
+
+/** Tooltip component — hover to show info text. */
+function Tip({ text }) {
+    return html`<span class="info-tooltip"><span class="info-tooltip-icon">i</span><span class="info-tooltip-content">${text}</span></span>`;
+}
+
+/** Numeric input that allows emptying the field, validates on blur. */
+function NumInput({ value, min, max, fallback, onChange, style, className }) {
+    const [raw, setRaw] = useState(String(value ?? ''));
+    const prevValue = useRef(value);
+    // Sync raw with external value changes (e.g., loading a config)
+    if (prevValue.current !== value && String(value) !== raw) {
+        setRaw(String(value ?? ''));
+        prevValue.current = value;
+    }
+    const handleInput = (e) => {
+        const v = e.target.value;
+        setRaw(v);
+        const n = parseInt(v, 10);
+        if (!isNaN(n)) onChange(n);
+    };
+    const handleBlur = () => {
+        const n = parseInt(raw, 10);
+        if (isNaN(n) || raw.trim() === '') {
+            const fb = fallback ?? min ?? 0;
+            setRaw(String(fb));
+            onChange(fb);
+        } else {
+            const clamped = Math.max(min ?? -Infinity, Math.min(max ?? Infinity, n));
+            setRaw(String(clamped));
+            onChange(clamped);
+        }
+    };
+    const isInvalid = raw.trim() !== '' && isNaN(parseInt(raw, 10));
+    return html`<input type="text" inputmode="numeric"
+        class=${`form-input-number ${isInvalid ? 'invalid' : ''} ${className || ''}`}
+        value=${raw} onInput=${handleInput} onBlur=${handleBlur}
+        style=${style || ''} />`;
+}
 
 function ConfigList({ configs, onEdit, onNew, onDelete, onDuplicate, onSeedDemo }) {
     const [search, setSearch] = useState('');
@@ -395,13 +434,13 @@ export function TestConfigs() {
                         <div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label class="form-label">Configuration Name * <span title="A unique name for this test configuration" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
+                                    <label class="form-label">Configuration Name * <${Tip} text="A unique name for this test configuration" /></label>
                                     <input class="form-input" value=${globalParams.name}
                                         onInput=${(e) => setGlobalParams(p => ({ ...p, name: e.target.value }))}
                                         placeholder="e.g., Customer API Load Test" />
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Description <span title="Optional notes about what this test covers" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
+                                    <label class="form-label">Description <${Tip} text="Optional notes about what this test covers" /></label>
                                     <input class="form-input" value=${globalParams.description}
                                         onInput=${(e) => setGlobalParams(p => ({ ...p, description: e.target.value }))}
                                         placeholder="Optional description" />
@@ -409,7 +448,7 @@ export function TestConfigs() {
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label class="form-label">${globalParams.environment_id ? 'Host URL (optional with environment)' : 'Host URL *'} <span title="The base URL of your GraphQL server. Not needed if an environment is selected." style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
+                                    <label class="form-label">${globalParams.environment_id ? 'Host URL (optional with environment)' : 'Host URL *'} <${Tip} text="The base URL of your GraphQL server. Not needed if an environment is selected." /></label>
                                     <input class="form-input" value=${globalParams.host}
                                         onInput=${(e) => setGlobalParams(p => ({ ...p, host: e.target.value }))}
                                         placeholder=${globalParams.environment_id ? 'Resolved from environment' : 'https://api.example.com'}
@@ -417,31 +456,31 @@ export function TestConfigs() {
                                     ${globalParams.environment_id && html`<span class="form-help">URL will be resolved from the selected environment</span>`}
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">GraphQL Path <span title="The path appended to the host URL, typically /graphql" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
+                                    <label class="form-label">GraphQL Path <${Tip} text="The path appended to the host URL, typically /graphql" /></label>
                                     <input class="form-input" value=${globalParams.graphql_path}
                                         onInput=${(e) => setGlobalParams(p => ({ ...p, graphql_path: e.target.value }))} />
                                 </div>
                             </div>
                             <div class="form-row-3">
                                 <div class="form-group">
-                                    <label class="form-label">Users <span title="Number of concurrent virtual users to simulate" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
-                                    <input class="form-input" type="number" min="1" value=${globalParams.user_count}
-                                        onInput=${(e) => setGlobalParams(p => ({ ...p, user_count: parseInt(e.target.value) || 1 }))} />
+                                    <label class="form-label">Users <${Tip} text="Number of concurrent virtual users to simulate" /></label>
+                                    <${NumInput} value=${globalParams.user_count} min=${1} fallback=${1}
+                                        onChange=${(v) => setGlobalParams(p => ({ ...p, user_count: v }))} />
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Ramp-up (sec) <span title="Time in seconds to gradually add users until the target count is reached" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
-                                    <input class="form-input" type="number" min="0" value=${globalParams.ramp_up_sec}
-                                        onInput=${(e) => setGlobalParams(p => ({ ...p, ramp_up_sec: parseInt(e.target.value) || 0 }))} />
+                                    <label class="form-label">Ramp-up (sec) <${Tip} text="Time in seconds to gradually add users until the target count is reached" /></label>
+                                    <${NumInput} value=${globalParams.ramp_up_sec} min=${0} fallback=${0}
+                                        onChange=${(v) => setGlobalParams(p => ({ ...p, ramp_up_sec: v }))} />
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Duration (sec) <span title="Total test duration in seconds. Test stops automatically after this time." style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
-                                    <input class="form-input" type="number" min="10" value=${globalParams.duration_sec}
-                                        onInput=${(e) => setGlobalParams(p => ({ ...p, duration_sec: parseInt(e.target.value) || 60 }))} />
+                                    <label class="form-label">Duration (sec) <${Tip} text="Total test duration in seconds. Test stops automatically after this time." /></label>
+                                    <${NumInput} value=${globalParams.duration_sec} min=${10} fallback=${60}
+                                        onChange=${(v) => setGlobalParams(p => ({ ...p, duration_sec: v }))} />
                                 </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label class="form-label">Environment <span title="Select a pre-configured environment to auto-fill host, path, and auth" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
+                                    <label class="form-label">Environment <${Tip} text="Select a pre-configured environment to auto-fill host, path, and auth" /></label>
                                     <select class="form-select" value=${globalParams.environment_id || ''}
                                         onChange=${(e) => {
                                             const env = environments.find(en => en.id === e.target.value);
@@ -459,7 +498,7 @@ export function TestConfigs() {
                                     </select>
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Auth Provider <span title="Authentication provider for injecting auth headers into requests" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
+                                    <label class="form-label">Auth Provider <${Tip} text="Authentication provider for injecting auth headers into requests" /></label>
                                     <select class="form-select" value=${authProviderId}
                                         onChange=${(e) => setAuthProviderId(e.target.value)}>
                                         <option value="">— None —</option>
@@ -468,7 +507,7 @@ export function TestConfigs() {
                                 </div>
                             </div>
                             <div class="form-group">
-                                <label class="form-label">GraphQL Schema * <span title="Paste your GraphQL schema definition. Types Query and Mutation will be parsed into operations." style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
+                                <label class="form-label">GraphQL Schema * <${Tip} text="Paste your GraphQL schema definition. Types Query and Mutation will be parsed into operations." /></label>
                                 <textarea class="form-textarea" rows="12" value=${schemaText}
                                     onInput=${(e) => setSchemaText(e.target.value)}
                                     placeholder="Paste your GraphQL schema here..." />
@@ -538,18 +577,18 @@ export function TestConfigs() {
                                         ${op.enabled && html`
                                             <div class="form-row-3 mb-4">
                                                 <div class="form-group">
-                                                    <label class="form-label">Delay Start (sec) <span title="Wait this many seconds before this operation starts sending requests" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
-                                                    <input class="form-input" type="number" min="0" value=${op.delay_start_sec}
-                                                        onInput=${(e) => updateOp(i, 'delay_start_sec', parseInt(e.target.value) || 0)} />
+                                                    <label class="form-label">Delay Start (sec) <${Tip} text="Wait this many seconds before this operation starts sending requests" /></label>
+                                                    <${NumInput} value=${op.delay_start_sec} min=${0} fallback=${0}
+                                                        onChange=${(v) => updateOp(i, 'delay_start_sec', v)} />
                                                 </div>
                                                 <div class="form-group">
-                                                    <label class="form-label">Data Range <span title="Range of values substituted into {r} placeholders in variable values during the test" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
+                                                    <label class="form-label">Data Range <${Tip} text="Range of values substituted into {r} placeholders in variable values during the test" /></label>
                                                     <div class="flex gap-2">
-                                                        <input class="form-input" type="number" style="width: 80px;" value=${op.data_range_start}
-                                                            onInput=${(e) => updateOp(i, 'data_range_start', parseInt(e.target.value) || 1)} />
+                                                        <${NumInput} value=${op.data_range_start} min=${1} fallback=${1}
+                                                            onChange=${(v) => updateOp(i, 'data_range_start', v)} style="width: 80px;" />
                                                         <span class="text-muted" style="line-height: 2.2;">to</span>
-                                                        <input class="form-input" type="number" style="width: 80px;" value=${op.data_range_end}
-                                                            onInput=${(e) => updateOp(i, 'data_range_end', parseInt(e.target.value) || 100)} />
+                                                        <${NumInput} value=${op.data_range_end} min=${1} fallback=${100}
+                                                            onChange=${(v) => updateOp(i, 'data_range_end', v)} style="width: 80px;" />
                                                     </div>
                                                 </div>
                                             </div>
@@ -622,14 +661,14 @@ export function TestConfigs() {
 
                             <div class="form-row mb-4">
                                 <div class="form-group">
-                                    <label class="form-label">Load Engine <span title="Locust uses Python workers, k6 uses a Go binary. Both support the same test config." style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
+                                    <label class="form-label">Load Engine <${Tip} text="Locust uses Python workers, k6 uses a Go binary. Both support the same test config." /></label>
                                     <select class="form-select" value=${engine} onChange=${(e) => setEngine(e.target.value)}>
                                         <option value="locust">Locust (Python)</option>
                                         <option value="k6">k6 (Go)</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Options <span title="Debug mode logs full request/response details for each operation" style="cursor: help; color: var(--text-disabled); font-weight: 400;">?</span></label>
+                                    <label class="form-label">Options <${Tip} text="Debug mode logs full request/response details for each operation" /></label>
                                     <div class="flex gap-4" style="padding-top: var(--space-2);">
                                         <label class="flex items-center gap-2" style="cursor: pointer; font-size: var(--font-size-sm);">
                                             <input type="checkbox" checked=${debugMode} onChange=${(e) => setDebugMode(e.target.checked)} />

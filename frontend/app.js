@@ -18,6 +18,7 @@ import { Trends } from './pages/Trends.js';
 import { Environments } from './pages/Environments.js';
 import { AuthProviders } from './pages/AuthProviders.js';
 import { GraphQLClient } from './pages/GraphQLClient.js';
+import { Settings } from './pages/Settings.js';
 
 const html = htm.bind(h);
 
@@ -69,6 +70,9 @@ function AppRouter() {
             break;
         case '/graphql-client':
             page = html`<${GraphQLClient} />`;
+            break;
+        case '/settings':
+            page = html`<${Settings} />`;
             break;
         default:
             page = html`

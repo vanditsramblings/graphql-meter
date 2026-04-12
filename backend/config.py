@@ -24,13 +24,25 @@ class Settings(BaseSettings):
     STATS_POLL_INTERVAL_SEC: int = 2
     MAX_ERROR_BUFFER: int = 500
     MAX_RUN_HISTORY: int = 200
-    CHART_HISTORY_RUNS: int = 10  # Number of completed runs to retain full chart data for
+    CHART_HISTORY_RUNS: int = 10
+
+    # Engine toggles
+    ENABLE_K6: bool = True
+    ENABLE_LOCUST: bool = True
+
+    # Thread / performance tuning
+    WORKER_THREADS: int = 4
+    UVICORN_WORKERS: int = 1
 
     # k6
     K6_BINARY_PATH: str = ""
 
     # Encryption for auth provider secrets
     ENCRYPTION_KEY: str = ""  # Auto-derived from JWT_SECRET if empty
+
+    # Polling intervals (frontend hints)
+    DASHBOARD_POLL_SEC: int = 5
+    RUNNING_TEST_POLL_SEC: int = 2
 
     # Azure AD (optional)
     AZURE_TENANT_ID: str = ""

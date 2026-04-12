@@ -139,11 +139,32 @@ def get_status(run_id: str) -> dict:
     if run:
         stats = list(run["stats_deque"])
         latest = stats[-1] if stats else {}
+        # Build compact chart data from all accumulated snapshots for live persistence
+        chart_data = []
+        for s in stats:
+            point = {
+                "t": round(s.get("elapsed_sec", 0), 1),
+                "rps": round(s.get("total_rps", 0), 2),
+                "req": s.get("total_requests", 0),
+                "fail": s.get("total_failures", 0),
+                "users": s.get("user_count", 0),
+            }
+            ops = s.get("operations", {})
+            if ops:
+                lat = {}
+                op_rps = {}
+                for name, st in ops.items():
+                    lat[name] = round(st.get("avg_response_ms", 0), 1)
+                    op_rps[name] = round(st.get("tps_actual", 0), 2)
+                point["lat"] = lat
+                point["op_rps"] = op_rps
+            chart_data.append(point)
         return {
             "run_id": run_id,
             "status": run["status"],
             "latest": latest,
             "history": stats[-60:],  # Last 2 minutes at 2s intervals
+            "chart_data": chart_data,
             "errors": list(run["errors"])[-20:],
             "debug_logs": list(run["debug_logs"])[-50:],
         }
@@ -289,6 +310,17 @@ def _persist_results(run_id: str, final: dict):
         summary = json.dumps(final)
         db.execute("UPDATE test_runs SET summary_json = ? WHERE id = ?", (summary, run_id))
 
+        # Build operation type lookup from config
+        op_type_map = {}
+        try:
+            row = db.execute("SELECT config_snapshot FROM test_runs WHERE id = ?", (run_id,)).fetchone()
+            if row and row["config_snapshot"]:
+                cfg = json.loads(row["config_snapshot"]) if isinstance(row["config_snapshot"], str) else row["config_snapshot"]
+                for op in cfg.get("operations", []):
+                    op_type_map[op["name"]] = op.get("type", "query")
+        except Exception:
+            pass
+
         for op_name, op_stats in final.get("operations", {}).items():
             db.execute(
                 "INSERT INTO operation_results (run_id, operation_name, operation_type, request_count, failure_count, "
@@ -297,7 +329,7 @@ def _persist_results(run_id: str, final: dict):
                 "avg_response_bytes, avg_request_bytes, stats_json) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
-                    run_id, op_name, "query",
+                    run_id, op_name, op_type_map.get(op_name, "query"),
                     op_stats.get("request_count", 0), op_stats.get("failure_count", 0),
                     op_stats.get("avg_response_ms", 0), op_stats.get("min_response_ms", 0),
                     op_stats.get("max_response_ms", 0), op_stats.get("p50_response_ms", 0),
@@ -328,13 +360,16 @@ def _build_chart_snapshots(run: dict) -> Optional[str]:
             "fail": s.get("total_failures", 0),
             "users": s.get("user_count", 0),
         }
-        # Per-operation avg latency
+        # Per-operation avg latency and RPS
         ops = s.get("operations", {})
         if ops:
             lat = {}
+            op_rps = {}
             for name, st in ops.items():
                 lat[name] = round(st.get("avg_response_ms", 0), 1)
+                op_rps[name] = round(st.get("tps_actual", 0), 2)
             point["lat"] = lat
+            point["op_rps"] = op_rps
         compact.append(point)
     return json.dumps(compact, separators=(",", ":"))
 
@@ -346,7 +381,7 @@ def _prune_chart_history(db):
         limit = settings.CHART_HISTORY_RUNS
         # Get IDs of runs to keep (most recent N completed/failed runs with chart data)
         keep_rows = db.execute(
-            "SELECT id FROM test_runs WHERE chart_snapshots IS NOT NULL AND status IN ('completed','failed') "
+            "SELECT id FROM test_runs WHERE chart_snapshots IS NOT NULL AND status IN ('completed','failed','stopped') "
             "ORDER BY started_at DESC LIMIT ?",
             (limit,),
         ).fetchall()

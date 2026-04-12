@@ -1,0 +1,92 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "graphql-meter"
+version = "0.1.0"
+description = "Self-hosted, all-in-one platform for GraphQL load testing"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+authors = [
+    { name = "vanditsramblings" },
+]
+keywords = ["graphql", "load-testing", "performance", "locust", "k6"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "httpx>=0.28.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "cachetools>=5.5.0",
+    "requests>=2.32.0",
+    "locust>=2.32.0",
+    "pyyaml>=6.0.2",
+    "graphql-core>=3.2.5",
+    "psutil>=6.1.0",
+    "python-multipart>=0.0.18",
+    "cryptography>=44.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.28.0",
+]
+
+[project.scripts]
+graphql-meter = "backend.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/vanditsramblings/graphql-meter"
+Repository = "https://github.com/vanditsramblings/graphql-meter"
+Issues = "https://github.com/vanditsramblings/graphql-meter/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"frontend" = "backend/frontend"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "backend/",
+    "frontend/",
+    "pyproject.toml",
+    "README.md",
+    "LICENSE",
+    "requirements.txt",
+]
+exclude = [
+    "backend/data/",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "main"
+build_command = "pip install build && python -m build"
+commit_message = "chore(release): {version}"
+
+[tool.semantic_release.changelog]
+changelog_file = "CHANGELOG.md"
+
+[tool.semantic_release.remote]
+type = "github"

@@ -1,6 +1,24 @@
 /* GraphQL Meter — Dark Professional Theme (Grafana/k6-inspired) */
 
 /* ============================================
+   Self-hosted Fonts (no external CDN)
+   ============================================ */
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url('/vendor/fonts/inter.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal;
+    font-weight: 400 500;
+    font-display: swap;
+    src: url('/vendor/fonts/jetbrains-mono.woff2') format('woff2');
+}
+
+/* ============================================
    CSS Custom Properties
    ============================================ */
 :root {
@@ -1259,3 +1277,179 @@ code, pre, .mono {
 /* justify-end utility */
 .justify-end { justify-content: flex-end; }
 .flex-wrap { flex-wrap: wrap; }
+
+/* Tree row hover effects */
+.tree-row:hover { background: var(--bg-tertiary); border-radius: var(--radius-sm); }
+.tree-row:hover .tree-action { opacity: 0.8 !important; }
+
+/* ============================================
+   Info Tooltips (modern hover tooltips)
+   ============================================ */
+.info-tooltip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+.info-tooltip-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-medium);
+    color: var(--text-disabled);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    transition: all var(--transition-fast);
+    cursor: default;
+}
+
+.info-tooltip:hover .info-tooltip-icon {
+    background: var(--accent-dim);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+.info-tooltip-content {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--font-size-xs);
+    font-weight: 400;
+    color: var(--text-primary);
+    white-space: normal;
+    width: max-content;
+    max-width: 260px;
+    line-height: 1.5;
+    box-shadow: var(--shadow-md);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-50%) translateY(4px);
+    transition: opacity 150ms ease, visibility 150ms ease, transform 150ms ease;
+    z-index: 100;
+    pointer-events: none;
+}
+
+.info-tooltip-content::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: var(--border-medium);
+}
+
+.info-tooltip:hover .info-tooltip-content {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* Inline tooltip for tab labels */
+.info-tooltip-inline {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    margin-left: 4px;
+    font-size: 11px;
+    color: var(--text-disabled);
+    cursor: default;
+}
+
+.info-tooltip-inline::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%) translateY(4px);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--font-size-xs);
+    font-weight: 400;
+    color: var(--text-primary);
+    white-space: normal;
+    width: max-content;
+    max-width: 280px;
+    line-height: 1.5;
+    box-shadow: var(--shadow-md);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 150ms ease, visibility 150ms ease, transform 150ms ease;
+    z-index: 100;
+    pointer-events: none;
+}
+
+.info-tooltip-inline:hover::after {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* ============================================
+   Numeric Input (allows empty intermediate state)
+   ============================================ */
+.form-input-number {
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-family);
+    font-size: var(--font-size-sm);
+    transition: border-color var(--transition-fast);
+    outline: none;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.form-input-number:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+.form-input-number::-webkit-inner-spin-button,
+.form-input-number::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.form-input-number.invalid {
+    border-color: var(--status-error);
+    box-shadow: 0 0 0 2px var(--status-error-dim);
+}
+
+/* ============================================
+   Chart Tooltip
+   ============================================ */
+.chart-tooltip {
+    position: absolute;
+    transform: translateX(-50%);
+    pointer-events: none;
+    z-index: 10;
+}
+
+.chart-tooltip-inner {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    font-size: var(--font-size-xs);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    min-width: 140px;
+    white-space: nowrap;
+}

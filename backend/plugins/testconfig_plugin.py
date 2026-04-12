@@ -97,6 +97,8 @@ class TestConfigPlugin(PluginBase):
             row = db.execute("SELECT id FROM test_configs WHERE id = ?", (config_id,)).fetchone()
             if not row:
                 raise HTTPException(404, "Config not found")
+            # Detach runs from this config so FK constraint doesn't block deletion
+            db.execute("UPDATE test_runs SET config_id = NULL WHERE config_id = ?", (config_id,))
             db.execute("DELETE FROM test_configs WHERE id = ?", (config_id,))
             db.commit()
             return {"status": "deleted"}

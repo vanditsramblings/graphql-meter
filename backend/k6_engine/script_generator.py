@@ -166,11 +166,11 @@ def generate_script(config: dict) -> str:
             '',
         ])
 
-    # handleSummary
+    # handleSummary — write to file instead of stdout to avoid pipe blocking
     lines.extend([
         'export function handleSummary(data) {',
         '  return {',
-        '    stdout: JSON.stringify(data, null, 2),',
+        "    './summary.json': JSON.stringify(data, null, 2),",
         '  };',
         '}',
     ])

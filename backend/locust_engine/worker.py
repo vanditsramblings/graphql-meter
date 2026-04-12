@@ -207,6 +207,11 @@ def run_worker(run_dir: str):
     # Setup environment
     env = Environment(user_classes=[UserClass], events=events)
     env.create_local_runner()
+    assert env.runner is not None
+    runner = env.runner  # non-optional local alias for use in closures
+
+    # Build operation type map
+    op_type_map = {op["name"]: op.get("type", "query") for op in operations}
 
     # Stats writer greenlet
     start_time = time.time()
@@ -218,17 +223,18 @@ def run_worker(run_dir: str):
             stats_data = {
                 "timestamp": time.time(),
                 "elapsed_sec": round(elapsed, 1),
-                "user_count": env.runner.user_count if env.runner else 0,
-                "state": env.runner.state if env.runner else "unknown",
+                "user_count": runner.user_count,
+                "state": runner.state,
                 "total_rps": 0,
                 "total_requests": 0,
                 "total_failures": 0,
                 "operations": {},
             }
 
-            for entry in env.runner.stats.entries.values():
+            for entry in runner.stats.entries.values():
                 ss = size_stats.get(entry.name, {"total_req": 0, "total_resp": 0, "count": 0})
                 stats_data["operations"][entry.name] = {
+                    "operation_type": op_type_map.get(entry.name, "query"),
                     "request_count": entry.num_requests,
                     "failure_count": entry.num_failures,
                     "avg_response_ms": round(entry.avg_response_time, 2) if entry.num_requests else 0,
@@ -262,23 +268,23 @@ def run_worker(run_dir: str):
 
             # Check stop sentinel
             if stop_path.exists():
-                env.runner.quit()
+                runner.quit()
                 break
 
     stats_greenlet = gevent.spawn(write_stats)
 
     # Start the run
-    env.runner.start(user_count, spawn_rate=user_count / max(ramp_up, 1))
+    runner.start(user_count, spawn_rate=user_count / max(ramp_up, 1))
 
     # Duration-based stop
     def duration_stop():
         gevent.sleep(duration)
         if not stop_path.exists():
-            env.runner.quit()
+            runner.quit()
 
     duration_greenlet = gevent.spawn(duration_stop)
 
-    env.runner.greenlet.join()
+    runner.greenlet.join()
 
     # Write final results
     final = {
@@ -287,9 +293,10 @@ def run_worker(run_dir: str):
         "user_count": user_count,
         "operations": {},
     }
-    for entry in env.runner.stats.entries.values():
+    for entry in runner.stats.entries.values():
         ss = size_stats.get(entry.name, {"total_req": 0, "total_resp": 0, "count": 0})
         final["operations"][entry.name] = {
+            "operation_type": op_type_map.get(entry.name, "query"),
             "request_count": entry.num_requests,
             "failure_count": entry.num_failures,
             "avg_response_ms": round(entry.avg_response_time, 2) if entry.num_requests else 0,
