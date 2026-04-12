@@ -16,6 +16,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+# Do NOT exclude frontend/lib — it contains app source files
+!frontend/lib/
 parts/
 sdist/
 var/
