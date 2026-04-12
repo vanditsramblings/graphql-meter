@@ -1,8 +1,7 @@
 """Vendor library manager — ensure Preact/HTM .mjs files are present."""
 
+import urllib.request
 from pathlib import Path
-
-import requests
 
 VENDOR_LIBS = {
     "preact.mjs": "https://unpkg.com/preact@10.24.3/dist/preact.mjs",
@@ -45,9 +44,8 @@ def ensure_vendor_libs() -> None:
             if dest.exists():
                 continue
             print(f"  Downloading {name}...")
-            resp = requests.get(url, timeout=30)
-            resp.raise_for_status()
-            dest.write_text(resp.text, encoding="utf-8")
+            with urllib.request.urlopen(url) as resp:
+                dest.write_bytes(resp.read())
         print("  Vendor libraries ready.")
 
     # Download fonts
@@ -60,7 +58,6 @@ def ensure_vendor_libs() -> None:
             if dest.exists():
                 continue
             print(f"  Downloading font {name}...")
-            resp = requests.get(url, timeout=30)
-            resp.raise_for_status()
-            dest.write_bytes(resp.content)
+            with urllib.request.urlopen(url) as resp:
+                dest.write_bytes(resp.read())
         print("  Vendor fonts ready.")
