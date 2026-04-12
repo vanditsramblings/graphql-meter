@@ -14,6 +14,8 @@ import time
 import os
 from datetime import datetime, timezone
 
+from backend import __version__ as _VERSION
+
 from fastapi import Request
 from pydantic import BaseModel
 from typing import Optional
@@ -86,7 +88,7 @@ type TestDataResponse {
 '''
 
 
-def _resolve_query(operation_name: str, variables: dict) -> dict:
+def _resolve_query(operation_name: str, variables: dict) -> Optional[dict]:
     """Resolve a GraphQL query against the mock schema."""
     _state["request_count"] += 1
     now = datetime.now(timezone.utc).isoformat()
@@ -109,7 +111,7 @@ def _resolve_query(operation_name: str, variables: dict) -> dict:
             "data": {
                 "serviceInfo": {
                     "name": "GraphQL Meter",
-                    "version": "0.1.0",
+                    "version": _VERSION,
                     "environment": os.environ.get("ENVIRONMENT", "development"),
                     "features": ["load_testing", "schema_parsing", "auth_providers", "environments"],
                 }
@@ -269,7 +271,7 @@ class GraphQLHealthPlugin(PluginBase):
             """Create a default test configuration targeting the built-in health endpoint.
 
             This gives new users a ready-to-run demo config.
-            Skips creation if a config named 'Health Endpoint Demo' already exists.
+            Skips creation if a config named 'Self Load Test' already exists.
             """
             from backend.plugins.auth_plugin import require_role
             from backend.plugins.storage_plugin import get_db
@@ -281,8 +283,8 @@ class GraphQLHealthPlugin(PluginBase):
 
             # Check for existing seed config
             existing = db.execute(
-                "SELECT id FROM test_configs WHERE name = ?",
-                ("Health Endpoint Demo",),
+                "SELECT id FROM test_configs WHERE name IN (?, ?)",
+                ("Self Load Test", "Health Endpoint Demo"),
             ).fetchone()
             if existing:
                 return {"id": existing["id"], "status": "exists", "message": "Default config already exists"}
@@ -345,8 +347,8 @@ class GraphQLHealthPlugin(PluginBase):
 
             config_json = json.dumps({
                 "global_params": {
-                    "name": "Health Endpoint Demo",
-                    "description": "Built-in demo config targeting the GraphQL health endpoint",
+                    "name": "Self Load Test",
+                    "description": "Built-in load test targeting the GraphQL health endpoint (self-test)",
                     "host": "http://localhost:8899",
                     "graphql_path": "/api/graphql-health/graphql",
                     "user_count": 5,
@@ -363,7 +365,7 @@ class GraphQLHealthPlugin(PluginBase):
             db.execute(
                 "INSERT INTO test_configs (id, name, description, schema_text, config_json, created_by, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (config_id, "Health Endpoint Demo", "Built-in demo config targeting the GraphQL health endpoint",
+                (config_id, "Self Load Test", "Built-in load test targeting the GraphQL health endpoint (self-test)",
                  HEALTH_SCHEMA, config_json, user["username"], now, now),
             )
             db.commit()

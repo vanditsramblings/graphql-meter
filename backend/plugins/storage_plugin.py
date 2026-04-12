@@ -18,6 +18,7 @@ _db_path: Optional[str] = None
 def get_db() -> sqlite3.Connection:
     """Get a thread-local SQLite connection."""
     if not hasattr(_local, "conn") or _local.conn is None:
+        assert _db_path is not None, "Database path not configured — StoragePlugin not initialized"
         _local.conn = sqlite3.connect(_db_path, check_same_thread=False)
         _local.conn.row_factory = sqlite3.Row
         _local.conn.execute("PRAGMA journal_mode=WAL")
@@ -155,6 +156,13 @@ def _init_tables(conn: sqlite3.Connection):
             created_by TEXT,
             created_at TEXT,
             updated_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS graphql_folders (
+            id TEXT PRIMARY KEY,
+            path TEXT NOT NULL UNIQUE,
+            created_by TEXT,
+            created_at TEXT
         );
     """)
     conn.commit()

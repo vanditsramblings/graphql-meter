@@ -36,6 +36,7 @@ const NAV_SECTIONS = [
         label: 'Tools',
         items: [
             { path: '/graphql-client', label: 'GraphQL Client' },
+            { path: '/settings', label: 'Settings' },
         ],
     },
 ];

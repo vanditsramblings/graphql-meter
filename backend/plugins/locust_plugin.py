@@ -36,6 +36,9 @@ class LocustPlugin(PluginBase):
         @self.router.post("/start")
         async def start_run(body: StartRunRequest, request: Request):
             user = require_auth(request)
+            from backend.config import get_settings
+            if not get_settings().ENABLE_LOCUST:
+                raise HTTPException(403, "Locust engine is disabled. Enable it in Settings.")
             try:
                 config = {
                     "config_id": body.config_id,
@@ -149,9 +152,9 @@ class LocustPlugin(PluginBase):
                             except Exception:
                                 errors.append({"message": line})
 
-            # Load chart snapshots for completed runs
-            chart_snapshots = None
-            if status in ("completed", "failed") and run_row:
+            # Load chart snapshots: from engine for running tests, from DB for completed
+            chart_snapshots = raw.get("chart_data") or None
+            if not chart_snapshots and status in ("completed", "failed", "stopped") and run_row:
                 try:
                     cs_row = db.execute("SELECT chart_snapshots FROM test_runs WHERE id = ?", (run_id,)).fetchone()
                     if cs_row and cs_row["chart_snapshots"]:

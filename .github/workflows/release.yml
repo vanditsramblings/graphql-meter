@@ -1,0 +1,154 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # ── Validate ──────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest tests/ -q --tb=short
+        env:
+          JWT_SECRET: ci-test-secret-key-1234567890
+          ENCRYPTION_KEY: ci-test-encryption-key-1234567890abcdef
+
+  # ── Build artifacts ───────────────────────────────────────
+  build-wheel:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install build requests
+
+      - name: Download vendor libraries
+        run: python -c "from backend.vendor_manager import ensure_vendor_libs; ensure_vendor_libs()"
+
+      - name: Build
+        run: python -m build
+
+      - name: Verify wheel
+        run: |
+          pip install dist/*.whl
+          python -c "from backend.cli import main; print('CLI OK')"
+          python -c "from backend.vendor_manager import _find_frontend_dir; assert _find_frontend_dir() is not None"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Download vendor libraries
+        run: python -c "from backend.vendor_manager import ensure_vendor_libs; ensure_vendor_libs()"
+
+      - name: Build executable
+        run: |
+          pyinstaller --onefile --name graphql-meter --add-data "frontend;backend/frontend" --hidden-import backend.cli backend/cli.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/graphql-meter.exe
+
+  # ── Publish GitHub Release ────────────────────────────────
+  publish-github:
+    needs: [build-wheel, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-exe
+          path: windows/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*
+            windows/graphql-meter.exe
+
+  # ── Publish Docker ────────────────────────────────────────
+  publish-docker:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

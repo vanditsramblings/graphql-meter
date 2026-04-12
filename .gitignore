@@ -214,4 +214,4 @@ backend/data/
 *.bak
 frontend/vendor/
 learnings.md
-.github/*
+.github/*.md
