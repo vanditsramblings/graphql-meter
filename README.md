@@ -1,19 +1,14 @@
 # GraphQL Meter
 
-### Schema-driven GraphQL performance testing, without the infrastructure overhead.
+**Schema-driven GraphQL performance testing — zero infrastructure, one container.**
 
 [![CI](https://github.com/vanditsramblings/graphql-meter/actions/workflows/ci.yml/badge.svg)](https://github.com/vanditsramblings/graphql-meter/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
-[![Docker](https://img.shields.io/badge/docker-ghcr.io-blue.svg)](https://github.com/vanditsramblings/graphql-meter/pkgs/container/graphql-meter)
+[![Release](https://img.shields.io/github/v/release/vanditsramblings/graphql-meter?color=green)](https://github.com/vanditsramblings/graphql-meter/releases)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/docker-ghcr.io-0db7ed)](https://github.com/vanditsramblings/graphql-meter/pkgs/container/graphql-meter)
 
-[Getting Started](#getting-started) |
-[Features](#features) |
-[Installation](#installation) |
-[Configuration](#configuration) |
-[Usage](#usage) |
-[Architecture](#architecture) |
-[Credits](#credits)
+[Quick Start](#getting-started) · [Features](#features) · [Installation](#installation) · [Configuration](#configuration) · [Architecture](#architecture)
 
 ---
 
@@ -31,6 +26,16 @@ It ships as a **single container** with everything included: two load-testing en
 ---
 
 ## Features
+
+| Capability | What it does |
+|:---|:---|
+| **Schema-Driven Tests** | Paste schema → auto-discover ops → generate typed test data |
+| **Dual Engine** | Locust (Python) + k6 (Go), subprocess-isolated, switchable per run |
+| **Live Monitoring** | p50/p90/p95/p99 charts updating every 2 seconds |
+| **Run Comparison** | Side-by-side delta with green/red regression highlights |
+| **Environments** | TLS/mTLS, client certs, 6 auth provider types with Fernet encryption |
+| **Built-in GQL Client** | Verify queries before running load tests |
+| **Runtime Config** | Adjust limits, toggle engines, enable debug — no restart needed |
 
 ### Schema-Driven Test Generation
 Paste a GraphQL schema and GraphQL Meter will parse it (via AST with regex fallback), discover all queries and mutations, and generate type-aware test variables with smart defaults. No hand-authored test scripts required.
