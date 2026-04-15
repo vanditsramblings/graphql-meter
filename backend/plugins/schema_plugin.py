@@ -83,13 +83,14 @@ def _is_list(type_node) -> bool:
 
 
 def _extract_operations_ast(schema_text: str) -> Dict[str, Any]:
-    """Parse schema with graphql-core and extract operations."""
+    """Parse schema with graphql-core and extract operations + object definitions."""
     doc = gql_parse(schema_text)
 
     input_types = {}
+    object_types = {}
     operations = []
 
-    # First pass: collect input types
+    # First pass: collect type definitions
     for defn in doc.definitions:
         if isinstance(defn, gql_ast.InputObjectTypeDefinitionNode):
             fields = []
@@ -102,18 +103,40 @@ def _extract_operations_ast(schema_text: str) -> Dict[str, Any]:
                     "is_list": _is_list(f.type),
                 })
             input_types[defn.name.value] = fields
+            
+        elif isinstance(defn, gql_ast.ObjectTypeDefinitionNode):
+            fields = []
+            for f in (defn.fields or []):
+                fields.append({
+                    "name": f.name.value,
+                    "type": _resolve_named_type(f.type)
+                })
+            object_types[defn.name.value] = fields
+
+    # Identify custom Query/Mutation root types
+    query_type_name = "Query"
+    mutation_type_name = "Mutation"
+    
+    for defn in doc.definitions:
+        if isinstance(defn, gql_ast.SchemaDefinitionNode):
+            for op_type in defn.operation_types:
+                if op_type.operation == gql_ast.OperationType.QUERY:
+                    query_type_name = op_type.type.name.value
+                elif op_type.operation == gql_ast.OperationType.MUTATION:
+                    mutation_type_name = op_type.type.name.value
 
     # Second pass: extract queries/mutations
     for defn in doc.definitions:
         if isinstance(defn, gql_ast.ObjectTypeDefinitionNode):
             op_type = None
-            if defn.name.value == "Query":
+            if defn.name.value == query_type_name:
                 op_type = "query"
-            elif defn.name.value == "Mutation":
+            elif defn.name.value == mutation_type_name:
                 op_type = "mutation"
 
             if op_type and defn.fields:
                 for field in defn.fields:
+                    return_type = _resolve_named_type(field.type)
                     variables = []
                     for arg in (field.arguments or []):
                         type_name = _resolve_named_type(arg.type)
@@ -127,10 +150,11 @@ def _extract_operations_ast(schema_text: str) -> Dict[str, Any]:
                     operations.append({
                         "name": field.name.value,
                         "type": op_type,
+                        "return_type": return_type,
                         "variables": variables,
                     })
 
-    return {"operations": operations, "input_types": input_types}
+    return {"operations": operations, "input_types": input_types, "object_types": object_types}
 
 
 def _extract_operations_regex(schema_text: str) -> Dict[str, Any]:
@@ -157,9 +181,18 @@ def _extract_operations_regex(schema_text: str) -> Dict[str, Any]:
                     "is_list": is_list,
                     "is_input_type": clean.endswith("Input"),
                 })
-            operations.append({"name": fm.group(1), "type": op_type, "variables": vars_})
+            
+            # For regex fallback, we do a basic extraction of return type
+            return_raw = fm.group(3).strip("[]!")
+            
+            operations.append({
+                "name": fm.group(1), 
+                "type": op_type, 
+                "return_type": return_raw,
+                "variables": vars_
+            })
 
-    return {"operations": operations, "input_types": {}}
+    return {"operations": operations, "input_types": {}, "object_types": {}}
 
 
 def _generate_default_value(var_name: str, var_type: str, is_input: bool, input_types: dict) -> Any:
@@ -178,7 +211,32 @@ def _generate_default_value(var_name: str, var_type: str, is_input: bool, input_
     return _TYPE_DEFAULTS.get(var_type, "")
 
 
-def _build_query_string(op_name: str, op_type: str, variables: list) -> str:
+def _build_selection_set(type_name: Optional[str], object_types: dict, depth: int = 0) -> str:
+    """Recursively build a selection set for a type to avoid just querying __typename."""
+    # Max depth of 2 to prevent massive queries or recursion loops.
+    # Fallback to __typename if scalar or unknown type.
+    if not type_name or depth > 2 or type_name not in object_types:
+        return "    __typename"
+
+    fields = object_types[type_name]
+    selection = []
+    
+    # Limit to first 5 fields for brevity in tests, can be adjusted
+    for f in fields[:5]:
+        f_name = f["name"]
+        f_type = f["type"]
+        
+        if f_type in object_types and depth < 1:
+            # Recursively fetch nested objects
+            inner = _build_selection_set(f_type, object_types, depth + 1)
+            selection.append(f"    {f_name} {{\n  {inner}\n    }}")
+        else:
+            selection.append(f"    {f_name}")
+
+    return "\n".join(selection) if selection else "    __typename"
+
+
+def _build_query_string(op_name: str, op_type: str, variables: list, return_type: Optional[str], object_types: dict) -> str:
     """Build a GraphQL query string for an operation."""
     var_defs = []
     args = []
@@ -196,8 +254,10 @@ def _build_query_string(op_name: str, op_type: str, variables: list) -> str:
     var_str = f"({', '.join(var_defs)})" if var_defs else ""
     arg_str = f"({', '.join(args)})" if args else ""
     keyword = op_type
+    
+    selection = _build_selection_set(return_type, object_types)
 
-    return f"{keyword} {op_name}{var_str} {{\n  {op_name}{arg_str} {{\n    __typename\n  }}\n}}"
+    return f"{keyword} {op_name}{var_str} {{\n  {op_name}{arg_str} {{\n{selection}\n  }}\n}}"
 
 
 class ParseRequest(BaseModel):
@@ -245,7 +305,13 @@ class SchemaPlugin(PluginBase):
 
             # Enrich with query strings and default test data
             for op in result["operations"]:
-                op["query"] = _build_query_string(op["name"], op["type"], op["variables"])
+                op["query"] = _build_query_string(
+                    op["name"], 
+                    op["type"], 
+                    op["variables"],
+                    op.get("return_type"),
+                    result.get("object_types", {})
+                )
                 for v in op["variables"]:
                     v["default_value"] = _generate_default_value(
                         v["name"], v["type"],
@@ -267,3 +333,4 @@ class SchemaPlugin(PluginBase):
                 body.is_input_type, body.input_types,
             )
             return {"variable_name": body.variable_name, "value": val}
+            
