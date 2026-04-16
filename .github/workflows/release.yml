@@ -145,7 +145,7 @@ jobs:
             release-assets/*.tgz
 
   publish-pypi:
-    if: ${{ secrets.PYPI_API_TOKEN != '' }}
+    if: secrets.PYPI_API_TOKEN != ''
     needs: build-wheel
     runs-on: ubuntu-latest
     permissions:
