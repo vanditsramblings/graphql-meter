@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8899
     DEBUG: bool = False
+    CORS_ORIGINS: str = "*"
 
     # Database
     DB_PATH: str = str(Path(__file__).parent / "data" / "portal.db")
@@ -55,6 +56,12 @@ class Settings(BaseSettings):
         "env_file_encoding": "utf-8",
         "case_sensitive": True,
     }
+
+    def cors_origins_list(self) -> list[str]:
+        raw = self.CORS_ORIGINS.strip()
+        if not raw or raw == "*":
+            return ["*"]
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
 def get_settings() -> Settings:

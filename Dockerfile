@@ -1,12 +1,14 @@
 # ── Stage 1: k6 binary ──────────────────────────────────────
 FROM grafana/k6:0.54.0 AS k6
 
-# ── Stage 2: Build wheels ───────────────────────────────────
+# ── Stage 2: Build runtime env from pyproject ───────────────
 FROM python:3.12-slim AS builder
 
 WORKDIR /tmp
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml README.md ./
+COPY backend/ backend/
+COPY frontend/ frontend/
+RUN pip install --no-cache-dir .
 
 # ── Stage 3: Runtime ────────────────────────────────────────
 FROM python:3.12-slim

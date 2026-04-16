@@ -141,12 +141,30 @@ pip install graphql-meter
 graphql-meter
 ```
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap vanditsramblings/tap
+brew install graphql-meter
+graphql-meter
+```
+
+> The tap repository will be published alongside the first stable release. Until then, use pipx or Docker.
+
 ### From Source (for development)
 
 ```bash
 git clone https://github.com/vanditsramblings/graphql-meter.git
 cd graphql-meter
-./start.sh
+./start.sh          # macOS / Linux
+# start.bat         # Windows (cmd)
+# .\start.ps1       # Windows (PowerShell)
+make test
+make lint
+make typecheck
+make security
+make openapi
+pre-commit install
 ```
 
 ### Kubernetes (Helm)
@@ -159,7 +177,7 @@ helm install graphql-meter ./helm/graphql-meter
 
 # Install with custom values
 helm install graphql-meter ./helm/graphql-meter \
-  --set env.JWT_SECRET=my-production-secret \
+  --set secret.jwtSecret=my-production-secret \
   --set persistence.size=5Gi \
   --set resources.limits.memory=2Gi
 
@@ -185,13 +203,17 @@ The chart includes:
 
 See [`helm/graphql-meter/values.yaml`](helm/graphql-meter/values.yaml) for all configurable values.
 
-`start.sh` performs the following steps:
+For production, set either `secret.jwtSecret` or `secret.existingSecret` and pin a release tag or image digest instead of relying on `latest`.
+
+`start.sh` / `start.bat` / `start.ps1` perform the following steps:
 1. Creates a Python virtual environment (`.venv`)
 2. Installs the package in editable mode with dev dependencies
 3. Copies `.env.example` to `.env` if not present
 4. Downloads vendored frontend libraries (Preact, HTM)
 5. Downloads the k6 binary for your platform
 6. Starts the server on **http://localhost:8899**
+
+**Windows** users can run `start.bat` (cmd) or `.\start.ps1` (PowerShell) — both are equivalent to `start.sh`.
 
 **Manual setup** (if you prefer not to use `start.sh`):
 
@@ -232,6 +254,7 @@ All settings are controlled via environment variables or a `.env` file. Copy `.e
 | `HOST` | `0.0.0.0` | Bind address |
 | `PORT` | `8899` | Listen port |
 | `DEBUG` | `false` | Enable debug logging |
+| `CORS_ORIGINS` | `*` | Comma-separated allowed origins; set explicitly in production |
 
 ### Authentication
 
@@ -335,6 +358,28 @@ From the Test History page, start any saved configuration. The live monitoring v
 ### 4. Manage Environments
 
 Create environment profiles with TLS/mTLS settings, client certificates, custom headers, and linked auth providers. Switch between environments when starting tests.
+
+---
+
+## Database Migrations
+
+Schema changes are managed with [Alembic](https://alembic.sqlalchemy.org/). On first install the database is created automatically by the application. For subsequent schema changes:
+
+```bash
+# Apply pending migrations
+make migrate
+# Or directly:
+source .venv/bin/activate
+alembic upgrade head
+
+# Create a new migration after a schema change
+alembic revision --autogenerate -m "describe_your_change"
+
+# Stamp an existing database at the baseline (pre-Alembic installs)
+alembic stamp 0001
+```
+
+The Alembic configuration lives in `alembic.ini` and `alembic/`. It reads `DB_PATH` from the environment (default: `backend/data/portal.db`).
 
 ---
 
