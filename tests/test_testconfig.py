@@ -1,14 +1,12 @@
 """Tests for the test config plugin — CRUD, TPS% validation."""
 
-import json
 import uuid
 
 import pytest
-from fastapi.testclient import TestClient
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from backend.plugins.testconfig_plugin import TestConfigPlugin
-from backend.plugins.storage_plugin import get_db
 from tests.conftest import auth_headers
 
 

@@ -143,7 +143,7 @@ def generate_script(config: dict) -> str:
             else:
                 vars_lines.append(f'    "{k}": {json.dumps(v)}')
 
-        lines.append(f'  const variables = {{')
+        lines.append('  const variables = {')
         lines.append(",\n".join(vars_lines))
         lines.append('  };')
 

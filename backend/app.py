@@ -1,18 +1,18 @@
 """GraphQL Meter — FastAPI application entry point."""
 
-import os
 import sys
 from pathlib import Path
 
 # Ensure backend package is importable
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from contextlib import asynccontextmanager
+
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from contextlib import asynccontextmanager
-import uvicorn
+from fastapi.staticfiles import StaticFiles
 
 from backend.config import get_settings
 from backend.core.plugin_registry import discover_plugins
@@ -61,8 +61,9 @@ def _seed_default_config():
     import json
     import uuid
     from datetime import datetime, timezone
-    from backend.plugins.storage_plugin import get_db
+
     from backend.plugins.graphql_health_plugin import HEALTH_SCHEMA
+    from backend.plugins.storage_plugin import get_db
 
     db = get_db()
     count = db.execute("SELECT COUNT(*) as cnt FROM test_configs").fetchone()["cnt"]

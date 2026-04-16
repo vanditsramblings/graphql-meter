@@ -8,15 +8,14 @@ import base64
 import json
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import HTTPException, Request, UploadFile, File, Form
+from fastapi import File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
-from typing import Optional, List
 
 from backend.core.plugin_base import PluginBase
-from backend.plugins.storage_plugin import get_db
 from backend.plugins.auth_plugin import require_auth, require_role
-
+from backend.plugins.storage_plugin import get_db
 
 # ---------- Encryption for cert passwords ----------
 

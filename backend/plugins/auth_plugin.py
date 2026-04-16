@@ -10,8 +10,8 @@ from typing import Optional
 from fastapi import HTTPException, Request
 from pydantic import BaseModel
 
-from backend.core.plugin_base import PluginBase
 from backend.config import get_settings
+from backend.core.plugin_base import PluginBase
 
 # Hardcoded users
 _USERS = {

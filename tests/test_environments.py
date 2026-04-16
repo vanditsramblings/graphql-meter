@@ -1,20 +1,17 @@
 """Tests for the environments plugin — CRUD, TLS config, cert types."""
 
-import json
 import uuid
 
 import pytest
-from fastapi.testclient import TestClient
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from backend.plugins.environments_plugin import (
-    EnvironmentsPlugin,
     CERT_TYPES,
-    TLS_MODES,
-    _encrypt_cert_password,
+    EnvironmentsPlugin,
     _decrypt_cert_password,
+    _encrypt_cert_password,
 )
-from backend.plugins.storage_plugin import get_db
 from tests.conftest import auth_headers
 
 

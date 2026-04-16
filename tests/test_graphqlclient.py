@@ -4,16 +4,15 @@ import json
 import uuid
 
 import pytest
-from fastapi.testclient import TestClient
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from backend.plugins.graphqlclient_plugin import (
-    GraphQLClientPlugin,
-    _resolve_target,
-    _format_type_ref,
     INTROSPECTION_QUERY,
+    GraphQLClientPlugin,
+    _format_type_ref,
+    _resolve_target,
 )
-from backend.plugins.storage_plugin import get_db
 from tests.conftest import auth_headers
 
 

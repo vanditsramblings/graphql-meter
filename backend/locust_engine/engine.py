@@ -1,7 +1,6 @@
 """Locust engine — lifecycle manager, subprocess spawn, file reader thread, stats polling."""
 
 import json
-import os
 import subprocess
 import sys
 import threading

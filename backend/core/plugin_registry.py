@@ -1,8 +1,6 @@
 """Auto-discover and load plugins from backend/plugins/."""
 
 import importlib
-import os
-import sys
 from pathlib import Path
 from typing import Dict
 

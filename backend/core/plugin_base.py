@@ -1,6 +1,7 @@
 """Abstract base class for all plugins."""
 
 from abc import ABC, abstractmethod
+
 from fastapi import APIRouter
 
 

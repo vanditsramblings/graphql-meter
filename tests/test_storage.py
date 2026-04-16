@@ -1,15 +1,12 @@
 """Tests for the storage plugin — database init, migrations, metadata CRUD."""
 
 import sqlite3
-from datetime import datetime, timezone
 
 import pytest
-from fastapi.testclient import TestClient
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from backend.plugins.storage_plugin import get_db, _init_tables, _migrate_schema
-from tests.conftest import auth_headers
-
+from backend.plugins.storage_plugin import _migrate_schema
 
 # ---------- Database initialization tests ----------
 

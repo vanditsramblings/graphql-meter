@@ -10,16 +10,15 @@ This serves as:
 """
 
 import json
-import time
 import os
+import time
 from datetime import datetime, timezone
-
-from backend import __version__ as _VERSION
+from typing import Optional
 
 from fastapi import Request
 from pydantic import BaseModel
-from typing import Optional
 
+from backend import __version__ as _VERSION
 from backend.core.plugin_base import PluginBase
 
 # Simple in-memory state for the mock GraphQL server
@@ -273,9 +272,10 @@ class GraphQLHealthPlugin(PluginBase):
             This gives new users a ready-to-run demo config.
             Skips creation if a config named 'Self Load Test' already exists.
             """
+            import uuid as _uuid
+
             from backend.plugins.auth_plugin import require_role
             from backend.plugins.storage_plugin import get_db
-            import uuid as _uuid
 
             user = require_role(request, "maintainer")
             db = get_db()

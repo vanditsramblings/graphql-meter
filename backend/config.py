@@ -1,9 +1,8 @@
 """Pydantic BaseSettings — all configuration from environment variables / .env file."""
 
-from pydantic_settings import BaseSettings
-from pydantic import Field
 from pathlib import Path
-import os
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
