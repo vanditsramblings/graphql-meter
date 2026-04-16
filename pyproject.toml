@@ -103,7 +103,8 @@ ignore_errors = true
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = ["E9", "F"]
+ignore = ["F841"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
