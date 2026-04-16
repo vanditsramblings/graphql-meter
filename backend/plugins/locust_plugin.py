@@ -1,14 +1,14 @@
 """Locust plugin — start/stop/status for Locust test runs."""
 
 import json
+from typing import Optional
 
 from fastapi import HTTPException, Request
 from pydantic import BaseModel
-from typing import Optional
 
 from backend.core.plugin_base import PluginBase
-from backend.plugins.auth_plugin import require_auth, require_role
 from backend.locust_engine import engine as locust_engine
+from backend.plugins.auth_plugin import require_auth
 
 
 class StartRunRequest(BaseModel):

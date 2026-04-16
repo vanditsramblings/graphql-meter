@@ -1,25 +1,22 @@
 """Tests for the auth providers plugin — encryption, CRUD, token caching."""
 
-import json
-import time
 
 import pytest
-from fastapi.testclient import TestClient
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from backend.plugins.authproviders_plugin import (
-    _encrypt,
-    _decrypt,
-    _mask,
-    _mask_config,
-    get_auth_header,
-    get_cached_auth_header,
-    clear_token_cache,
     AUTH_TYPE_FIELDS,
     AuthProvidersPlugin,
+    _decrypt,
+    _encrypt,
+    _mask,
+    _mask_config,
     _token_cache,
+    clear_token_cache,
+    get_auth_header,
+    get_cached_auth_header,
 )
-from backend.plugins.storage_plugin import get_db
 from tests.conftest import auth_headers
 
 

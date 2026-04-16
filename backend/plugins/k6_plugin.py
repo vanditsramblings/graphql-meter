@@ -1,12 +1,13 @@
 """k6 plugin — start/stop/status for k6 test runs."""
 
-from fastapi import HTTPException, Request
-from pydantic import BaseModel
 from typing import Optional
 
+from fastapi import HTTPException, Request
+from pydantic import BaseModel
+
 from backend.core.plugin_base import PluginBase
-from backend.plugins.auth_plugin import require_auth, require_role
 from backend.k6_engine import engine as k6_engine
+from backend.plugins.auth_plugin import require_auth
 
 
 class StartK6RunRequest(BaseModel):
@@ -86,8 +87,9 @@ class K6Plugin(PluginBase):
                     "total_request_bytes": stats.get("total_request_bytes", 0),
                 })
 
-            from backend.plugins.storage_plugin import get_db
             import json as _json
+
+            from backend.plugins.storage_plugin import get_db
             db = get_db()
             run_row = db.execute(
                 "SELECT name, started_at, config_snapshot, debug_mode, summary_json, status as db_status FROM test_runs WHERE id = ?",

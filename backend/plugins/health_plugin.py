@@ -3,17 +3,16 @@
 import os
 import time
 from datetime import datetime, timezone
-
-import psutil
-from fastapi import HTTPException, Request
-from pydantic import BaseModel
 from typing import Optional
 
-from backend.core.plugin_base import PluginBase
-from backend.config import get_settings
-from backend.plugins.auth_plugin import require_auth, require_role
+import psutil
+from fastapi import Request
+from pydantic import BaseModel
 
 from backend import __version__ as _VERSION
+from backend.config import get_settings
+from backend.core.plugin_base import PluginBase
+from backend.plugins.auth_plugin import require_auth, require_role
 
 _start_time = time.time()
 

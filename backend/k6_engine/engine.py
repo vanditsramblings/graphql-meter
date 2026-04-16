@@ -5,9 +5,7 @@ import json
 import math
 import os
 import signal
-import shutil
 import subprocess
-import sys
 import threading
 import time
 import uuid
@@ -17,9 +15,9 @@ from pathlib import Path
 from typing import Dict
 
 from backend.config import get_settings
-from backend.plugins.storage_plugin import get_db
 from backend.k6_engine.script_generator import generate_script
 from backend.k6_manager import ensure_k6
+from backend.plugins.storage_plugin import get_db
 
 _active_runs: Dict[str, dict] = {}
 _lock = threading.Lock()

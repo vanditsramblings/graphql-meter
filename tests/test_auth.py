@@ -3,22 +3,17 @@
 import time
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from fastapi import FastAPI, Request
 
+from backend.config import get_settings
 from backend.plugins.auth_plugin import (
+    AuthPlugin,
     _create_jwt,
     _decode_jwt,
-    get_current_user,
-    require_auth,
-    require_role,
-    has_role,
     get_flags_for_role,
-    AuthPlugin,
+    has_role,
 )
-from backend.config import get_settings
-from tests.conftest import auth_headers
-
 
 # ---------- JWT helper tests ----------
 

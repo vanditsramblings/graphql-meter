@@ -1,7 +1,6 @@
 """k6 binary dependency manager — detect or auto-download k6."""
 
 import hashlib
-import os
 import platform
 import shutil
 import stat

@@ -1,16 +1,16 @@
 """CLI entry point for graphql-meter."""
 
-import sys
 
 
 def main():
     """Start the GraphQL Meter server."""
-    from backend.vendor_manager import ensure_vendor_libs
     from backend.config import get_settings
+    from backend.vendor_manager import ensure_vendor_libs
 
     ensure_vendor_libs()
 
     import uvicorn
+
     from backend.app import app
 
     settings = get_settings()

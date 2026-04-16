@@ -1,8 +1,6 @@
 """Shared test fixtures for backend unit tests."""
 
-import os
 import sqlite3
-import tempfile
 import time
 
 import pytest
@@ -66,8 +64,8 @@ def db():
 @pytest.fixture
 def admin_token():
     """Generate a valid admin JWT token for authenticated requests."""
-    from backend.plugins.auth_plugin import _create_jwt
     from backend.config import get_settings
+    from backend.plugins.auth_plugin import _create_jwt
     settings = get_settings()
     payload = {
         "sub": "admin",
@@ -82,8 +80,8 @@ def admin_token():
 @pytest.fixture
 def maintainer_token():
     """Generate a valid maintainer JWT token."""
-    from backend.plugins.auth_plugin import _create_jwt
     from backend.config import get_settings
+    from backend.plugins.auth_plugin import _create_jwt
     settings = get_settings()
     payload = {
         "sub": "maintainer",
@@ -98,8 +96,8 @@ def maintainer_token():
 @pytest.fixture
 def reader_token():
     """Generate a valid reader JWT token."""
-    from backend.plugins.auth_plugin import _create_jwt
     from backend.config import get_settings
+    from backend.plugins.auth_plugin import _create_jwt
     settings = get_settings()
     payload = {
         "sub": "reader",

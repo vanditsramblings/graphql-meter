@@ -10,7 +10,6 @@ import sys
 import tempfile
 import time
 import traceback
-from collections import defaultdict
 from pathlib import Path
 
 
@@ -20,7 +19,6 @@ def run_worker(run_dir: str):
     import gevent
     from locust import events
     from locust.env import Environment
-    from locust.stats import stats_history, RequestStats
 
     run_path = Path(run_dir)
     config_path = run_path / "config.json"
@@ -73,7 +71,7 @@ def run_worker(run_dir: str):
         return {k: _resolve_placeholder(v, r_val) for k, v in vars_dict.items()}
 
     # Build dynamic HttpUser
-    from locust import HttpUser, task, constant_pacing
+    from locust import HttpUser, constant_pacing
 
     task_funcs = {}
     range_counters = {}

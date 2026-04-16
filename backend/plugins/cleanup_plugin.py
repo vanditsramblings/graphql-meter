@@ -1,24 +1,25 @@
 """Cleanup plugin — execute delete mutations for test data cleanup."""
 
 import json
-import uuid
 import threading
 import time
+import uuid
 from datetime import datetime, timezone
 
 import httpx
 from fastapi import HTTPException, Request
 
 from backend.core.plugin_base import PluginBase
-from backend.plugins.storage_plugin import get_db
 from backend.plugins.auth_plugin import require_auth, require_role
+from backend.plugins.storage_plugin import get_db
 
 _cleanup_threads = {}
 
 
 def _run_cleanup(job_id: str, run_id: str, host: str, graphql_path: str, operations: list, auth_header: str = ""):
     """Background thread that executes delete mutations."""
-    import sqlite3, threading as th
+    import sqlite3
+
     from backend.config import get_settings
 
     settings = get_settings()

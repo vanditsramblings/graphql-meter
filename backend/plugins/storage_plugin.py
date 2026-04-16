@@ -4,12 +4,12 @@ import sqlite3
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional
 
 from fastapi import HTTPException
 
-from backend.core.plugin_base import PluginBase
 from backend.config import get_settings
+from backend.core.plugin_base import PluginBase
 
 _local = threading.local()
 _db_path: Optional[str] = None

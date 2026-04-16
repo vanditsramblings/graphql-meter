@@ -16,10 +16,10 @@ from cryptography.fernet import Fernet
 from fastapi import HTTPException, Request
 from pydantic import BaseModel
 
-from backend.core.plugin_base import PluginBase
 from backend.config import get_settings
-from backend.plugins.storage_plugin import get_db
+from backend.core.plugin_base import PluginBase
 from backend.plugins.auth_plugin import require_auth, require_role
+from backend.plugins.storage_plugin import get_db
 
 # ---------- Encryption helpers ----------
 
@@ -233,8 +233,8 @@ def _fetch_oauth2_token(config: dict, auth_type: str) -> Optional[dict]:
 
 def _generate_custom_jwt(config: dict) -> Optional[dict]:
     """Generate a JWT token using custom claims."""
-    import hmac as hmac_mod
     import hashlib as hashlib_mod
+    import hmac as hmac_mod
     import time
 
     alg = config.get("algorithm", "HS256")

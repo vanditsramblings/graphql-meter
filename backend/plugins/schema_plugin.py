@@ -1,7 +1,7 @@
 """Schema plugin — GraphQL AST parsing, operation extraction, test data generation."""
 
 import re
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
 from pydantic import BaseModel
@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from backend.core.plugin_base import PluginBase
 
 try:
-    from graphql import parse as gql_parse, print_ast
+    from graphql import parse as gql_parse
     from graphql.language import ast as gql_ast
     HAS_GRAPHQL_CORE = True
 except ImportError:
@@ -293,7 +293,7 @@ class SchemaPlugin(PluginBase):
             if HAS_GRAPHQL_CORE:
                 try:
                     result = _extract_operations_ast(schema_text)
-                except Exception as e:
+                except Exception:
                     parse_method = "regex"
                     result = _extract_operations_regex(schema_text)
             else:

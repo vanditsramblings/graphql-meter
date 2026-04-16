@@ -1,15 +1,14 @@
 """Results plugin — run history, per-op stats, compare, trends, notes/tags."""
 
 import json
-from datetime import datetime, timezone
-
-from fastapi import HTTPException, Request, Query
-from pydantic import BaseModel
 from typing import Optional
 
+from fastapi import HTTPException, Query, Request
+from pydantic import BaseModel
+
 from backend.core.plugin_base import PluginBase
-from backend.plugins.storage_plugin import get_db
 from backend.plugins.auth_plugin import require_auth, require_role
+from backend.plugins.storage_plugin import get_db
 
 
 class NotesRequest(BaseModel):

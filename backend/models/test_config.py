@@ -1,7 +1,8 @@
 """Pydantic models for test configuration."""
 
+from typing import Any, List, Optional
+
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
 
 
 class VariableConfig(BaseModel):
