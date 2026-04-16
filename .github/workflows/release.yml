@@ -144,22 +144,6 @@ jobs:
             windows/graphql-meter.exe
             release-assets/*.tgz
 
-  publish-pypi:
-    if: "${{ secrets.PYPI_API_TOKEN != '' }}"
-    needs: build-wheel
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
 
   publish-docker:
     needs: quality-check
@@ -201,3 +185,20 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          
+  #publish-pypi:
+  #  if: "${{ secrets.PYPI_API_TOKEN != '' }}"
+  #  needs: build-wheel
+  #  runs-on: ubuntu-latest
+  #  permissions:
+  #    contents: read
+  #  steps:
+  #    - uses: actions/download-artifact@v4
+  #      with:
+  #        name: dist
+  #        path: dist/
+  #
+  #    - name: Publish to PyPI
+  #      uses: pypa/gh-action-pypi-publish@release/v1
+  #      with:
+  #        password: ${{ secrets.PYPI_API_TOKEN }}
