@@ -128,18 +128,19 @@ jobs:
           scan-ref: .
           format: json
           output: trivy-results.json
-          exit-code: "0"
-          severity: CRITICAL,HIGH
+          exit-code: "0" # Always return 0 here, let Python handle the failure logic
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL # Tell Trivy to report ALL severities
           vuln-type: library
           ignore-unfixed: true
           scanners: vuln
         env:
           TRIVY_DETECTION_PRIORITY: comprehensive
 
-      - name: Enforce Trivy scan policy
+      - name: Parse Results and Enforce Policy
         run: |
           python - <<'PY'
           import json, sys
+          from collections import Counter
           
           with open("trivy-results.json", encoding="utf-8") as f:
               results = json.load(f).get("Results") or []
@@ -149,22 +150,45 @@ jobs:
               print("ERROR: Trivy scanned zero supported targets.")
               sys.exit(1)
               
-          critical_count = 0
+          severity_counts = Counter({'UNKNOWN': 0, 'LOW': 0, 'MEDIUM': 0, 'HIGH': 0, 'CRITICAL': 0})
+          high_crit_count = 0
+          
+          print("========================================")
+          print("      DETAILED VULNERABILITY LOG      ")
+          print("========================================")
+          
           for i in results:
               target = i.get("Target", "Unknown Target")
-              for v in (i.get("Vulnerabilities") or []):
-                  pkg = v.get("PkgName", "Unknown")
-                  sev = v.get("Severity", "UNKNOWN")
-                  vid = v.get("VulnerabilityID", "UNKNOWN")
-                  
-                  print(f"[{sev}] {pkg} ({vid}) found in {target}")
-                  
-                  if sev == "CRITICAL":
-                      critical_count += 1
+              vulns = i.get("Vulnerabilities") or []
+              
+              if vulns:
+                  print(f"\nTarget: {target}")
+                  for v in vulns:
+                      pkg = v.get("PkgName", "Unknown")
+                      sev = v.get("Severity", "UNKNOWN")
+                      vid = v.get("VulnerabilityID", "UNKNOWN")
+                      title = v.get("Title", "No title provided")
                       
-          if critical_count > 0: 
-              print(f"\nERROR: Found {critical_count} CRITICAL vulnerabilities.")
+                      # Increment counters
+                      severity_counts[sev] += 1
+                      if sev in {"HIGH", "CRITICAL"}:
+                          high_crit_count += 1
+                          
+                      print(f"  [{sev.ljust(8)}] {pkg} ({vid}): {title}")
+          
+          print("\n========================================")
+          print("        TOTAL DETECTION SUMMARY         ")
+          print("========================================")
+          for sev in ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN']:
+              print(f"{sev.ljust(10)}: {severity_counts[sev]}")
+          
+          print("----------------------------------------")
+          print(f"Total Vulns : {sum(severity_counts.values())}")
+          print("========================================\n")
+              
+          if high_crit_count > 0: 
+              print(f"❌ ERROR: Pipeline failing due to {high_crit_count} HIGH/CRITICAL vulnerabilities.")
               sys.exit(1)
               
-          print(f"\nSuccess: Trivy scanned {len(scanned)} target(s) with no CRITICAL findings.")
+          print(f"✅ Success: No HIGH or CRITICAL vulnerabilities found. (Total scanned targets: {len(scanned)})")
           PY
