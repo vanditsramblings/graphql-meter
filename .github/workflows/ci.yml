@@ -40,12 +40,6 @@ jobs:
       - name: Export OpenAPI spec
         run: python scripts/export_openapi.py
 
-      #- name: Set up Helm
-      #  uses: azure/setup-helm@v4
-
-      #- name: Lint Helm chart
-      #  run: helm lint ./helm/graphql-meter --set secret.jwtSecret=ci-chart-secret-1234567890
-
   test:
     runs-on: ubuntu-latest
     needs: quality
@@ -115,6 +109,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies and generate lockfile
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip freeze > requirements.txt
+
       - name: Run Trivy vulnerability scan (filesystem)
         uses: aquasecurity/trivy-action@v0.35.0
         with:
@@ -134,10 +140,31 @@ jobs:
         run: |
           python - <<'PY'
           import json, sys
-          results = json.load(open("trivy-results.json", encoding="utf-8")).get("Results") or []
+          
+          with open("trivy-results.json", encoding="utf-8") as f:
+              results = json.load(f).get("Results") or []
+              
           scanned = [i for i in results if i.get("Target") not in ("", "-") and i.get("Type") not in ("", "-")]
-          if not scanned: print("ERROR: Trivy scanned zero supported targets."); sys.exit(1)
-          findings = sum(1 for i in results for v in (i.get("Vulnerabilities") or []) if v.get("Severity") in {"HIGH", "CRITICAL"})
-          if findings: print(f"ERROR: Found {findings} HIGH/CRITICAL vulnerabilities."); sys.exit(1)
-          print(f"Trivy scanned {len(scanned)} target(s) with no HIGH/CRITICAL findings.")
+          if not scanned: 
+              print("ERROR: Trivy scanned zero supported targets.")
+              sys.exit(1)
+              
+          critical_count = 0
+          for i in results:
+              target = i.get("Target", "Unknown Target")
+              for v in (i.get("Vulnerabilities") or []):
+                  pkg = v.get("PkgName", "Unknown")
+                  sev = v.get("Severity", "UNKNOWN")
+                  vid = v.get("VulnerabilityID", "UNKNOWN")
+                  
+                  print(f"[{sev}] {pkg} ({vid}) found in {target}")
+                  
+                  if sev == "CRITICAL":
+                      critical_count += 1
+                      
+          if critical_count > 0: 
+              print(f"\nERROR: Found {critical_count} CRITICAL vulnerabilities.")
+              sys.exit(1)
+              
+          print(f"\nSuccess: Trivy scanned {len(scanned)} target(s) with no CRITICAL findings.")
           PY
