@@ -115,27 +115,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install dependencies (for lock generation)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: Generate pip freeze lock
-        run: pip freeze > requirements.lock
-
       - name: Run Trivy vulnerability scan (filesystem)
         uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: fs
           scan-ref: .
-          format: table
-          exit-code: "1"
+          format: json
+          output: trivy-results.json
+          exit-code: "0"
           severity: CRITICAL,HIGH
+          vuln-type: library
           ignore-unfixed: true
           scanners: vuln
+        env:
+          TRIVY_DETECTION_PRIORITY: comprehensive
+
+      - name: Enforce Trivy scan policy
+        run: |
+          python - <<'PY'
+          import json, sys
+          results = json.load(open("trivy-results.json", encoding="utf-8")).get("Results") or []
+          scanned = [i for i in results if i.get("Target") not in ("", "-") and i.get("Type") not in ("", "-")]
+          if not scanned: print("ERROR: Trivy scanned zero supported targets."); sys.exit(1)
+          findings = sum(1 for i in results for v in (i.get("Vulnerabilities") or []) if v.get("Severity") in {"HIGH", "CRITICAL"})
+          if findings: print(f"ERROR: Found {findings} HIGH/CRITICAL vulnerabilities."); sys.exit(1)
+          print(f"Trivy scanned {len(scanned)} target(s) with no HIGH/CRITICAL findings.")
+          PY
