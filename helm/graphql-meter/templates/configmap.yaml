@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "graphql-meter.fullname" . }}
+  labels:
+    {{- include "graphql-meter.labels" . | nindent 4 }}
+data:
+  DB_PATH: /data/portal.db
+  {{- range $key, $value := .Values.env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

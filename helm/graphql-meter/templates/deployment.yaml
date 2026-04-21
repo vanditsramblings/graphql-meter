@@ -29,12 +29,14 @@ spec:
               containerPort: 8899
               protocol: TCP
           env:
-            {{- range $key, $value := .Values.env }}
-            - name: {{ $key }}
-              value: {{ $value | quote }}
-            {{- end }}
-            - name: DB_PATH
-              value: /data/portal.db
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (include "graphql-meter.fullname" .) .Values.secret.existingSecret }}
+                  key: JWT_SECRET
+          envFrom:
+            - configMapRef:
+                name: {{ include "graphql-meter.fullname" . }}
           livenessProbe:
             httpGet:
               path: /api/health/status

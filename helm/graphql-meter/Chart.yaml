@@ -1,11 +1,16 @@
 apiVersion: v2
 name: graphql-meter
-description: Schema-driven GraphQL performance testing platform
+description: Schema-driven GraphQL performance testing, GraphQL load testing, and GraphQL client platform
 type: application
 version: 0.1.0
-appVersion: "latest"
+appVersion: "0.1.0"
 keywords:
   - graphql
+  - graphql testing
+  - graphql performance testing
+  - graphql load testing
+  - graphql client
+  - api testing
   - performance
   - load-testing
   - locust

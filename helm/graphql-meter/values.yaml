@@ -4,7 +4,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/vanditsramblings/graphql-meter
-  tag: "latest"
+  tag: "0.1.0"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -31,9 +31,13 @@ ingress:
   #    hosts:
   #      - graphql-meter.local
 
-# Environment variables passed to the container
+# Sensitive configuration should come from a Secret, not plain values.
+secret:
+  existingSecret: ""
+  jwtSecret: ""
+
+# Non-sensitive environment variables passed to the container
 env:
-  JWT_SECRET: "change-me-in-production"
   MAX_CONCURRENT_RUNS: "3"
   ENABLE_K6: "true"
   ENABLE_LOCUST: "true"

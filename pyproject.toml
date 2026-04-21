@@ -5,14 +5,25 @@ build-backend = "hatchling.build"
 [project]
 name = "graphql-meter"
 version = "0.1.0"
-description = "Self-hosted, all-in-one platform for GraphQL load testing"
+description = "Self-hosted GraphQL performance testing, GraphQL load testing, and GraphQL client platform"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
 authors = [
     { name = "vanditsramblings" },
 ]
-keywords = ["graphql", "load-testing", "performance", "locust", "k6"]
+keywords = [
+    "graphql",
+    "graphql performance testing",
+    "graphql load testing",
+    "graphql testing",
+    "graphql client",
+    "api testing",
+    "performance testing",
+    "load-testing",
+    "locust",
+    "k6",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Framework :: FastAPI",
