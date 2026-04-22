@@ -54,7 +54,7 @@ export function Sidebar({ currentPath }) {
     return html`
         <aside class="sidebar">
             <div class="sidebar-logo">
-                <div class="logo-icon"><${Icon} name="gauge" size=${20} /></div>
+                <div class="logo-icon"><img src="/favicon.svg" alt="GraphQL Meter" width="28" height="28" /></div>
                 <h1>GraphQL Meter</h1>
             </div>
 

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/graphql-meter-readme.svg" alt="GraphQL Meter" width="480" />
+</p>
+
 # GraphQL Meter
 
 **Schema-driven GraphQL performance testing, GraphQL load testing, and GraphQL client workflows in one container.**
@@ -71,7 +75,9 @@ Choose between **Locust** and **k6** per test run. Both engines are subprocess-i
 
 Watch throughput, response times, error rates, and per-operation breakdowns update live every 2 seconds. Interactive SVG charts render directly in the browser with no chart library dependency.
 
-![Live Monitoring](assets/07-live-monitoring.png)
+![Live Monitoring](assets/07-1-livemonitoring.png)
+
+![Live Monitoring](assets/07-2-livemonitoring.png)
 
 ### Test Configuration Wizard
 
@@ -140,7 +146,6 @@ docker run -p 8899:8899 ghcr.io/vanditsramblings/graphql-meter:latest
 
 # Run with custom configuration
 docker run -p 8899:8899 \
-  -e JWT_SECRET=your-secret-key-here \
   -e MAX_CONCURRENT_RUNS=5 \
   -e ENABLE_K6=true \
   -e ENABLE_LOCUST=true \
@@ -211,7 +216,6 @@ helm install graphql-meter ./helm/graphql-meter
 
 # Install with custom values
 helm install graphql-meter ./helm/graphql-meter \
-  --set secret.jwtSecret=my-production-secret \
   --set persistence.size=5Gi \
   --set resources.limits.memory=2Gi
 
@@ -294,8 +298,6 @@ All settings are controlled via environment variables or a `.env` file. Copy `.e
 
 | Variable | Default | Description |
 |:---|:---|:---|
-| `JWT_SECRET` | (change me) | Secret key for JWT HS256 signing. **Must be changed in production.** |
-| `JWT_EXPIRY_HOURS` | `24` | Token expiration time |
 | `ENCRYPTION_KEY` | (auto) | Fernet key for encrypting auth provider secrets. Auto-derived from `JWT_SECRET` if empty. |
 
 ### Load Testing
@@ -335,14 +337,13 @@ All settings are controlled via environment variables or a `.env` file. Copy `.e
 
 **Environment variables** (highest priority):
 ```bash
-export JWT_SECRET=my-production-secret
 export MAX_CONCURRENT_RUNS=5
 graphql-meter
 ```
 
 **Docker environment**:
 ```bash
-docker run -e JWT_SECRET=my-secret -e ENABLE_K6=false -p 8899:8899 ghcr.io/vanditsramblings/graphql-meter
+docker run -e ENABLE_K6=false -p 8899:8899 ghcr.io/vanditsramblings/graphql-meter
 ```
 
 **.env file** (loaded automatically from working directory):

@@ -36,14 +36,7 @@ export function Login() {
         <div class="login-container">
             <div class="login-card">
                 <div class="login-logo">
-                    <div style="
-                        width: 48px; height: 48px;
-                        background: var(--accent-primary);
-                        border-radius: var(--radius-md);
-                        display: flex; align-items: center; justify-content: center;
-                        font-weight: 700; font-size: 1.5rem; color: #0b0c0e;
-                        margin: 0 auto;
-                    ">G</div>
+                    <img src="/favicon.svg" alt="GraphQL Meter" width="96" height="96" style="margin: 0 auto; display: block;" />
                     <h1>GraphQL Meter</h1>
                     <p>GraphQL Performance Testing Platform</p>
                 </div>
