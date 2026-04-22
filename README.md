@@ -41,7 +41,7 @@ GraphQL teams usually need to solve the same problems before they can test at al
 
 GraphQL Meter removes that setup cost by auto-discovering operations from your schema and generating everything needed to run, monitor, and compare tests.
 
-![Dashboard](assets/07-live-monitoring.png)
+![Dashboard](assets/00-dashboard.png)
 
 ---
 
