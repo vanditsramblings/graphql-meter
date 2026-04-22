@@ -217,3 +217,7 @@ backend/data/
 frontend/vendor/
 learnings.md
 .github/*.md
+.python-version
+notes/*
+alembic/
+alembic*

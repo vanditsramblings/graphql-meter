@@ -200,14 +200,9 @@ code, pre, .mono {
 .sidebar-logo .logo-icon {
     width: 28px;
     height: 28px;
-    background: var(--accent-primary);
-    border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 700;
-    font-size: var(--font-size-sm);
-    color: #0b0c0e;
 }
 
 .sidebar-section {

@@ -1,6 +1,10 @@
+<p align="center">
+  <img src="assets/graphql-meter-readme.svg" alt="GraphQL Meter" width="480" />
+</p>
+
 # GraphQL Meter
 
-**Schema-driven GraphQL performance testing — zero infrastructure, one container.**
+**Schema-driven GraphQL performance testing, GraphQL load testing, and GraphQL client workflows in one container.**
 
 [![CI](https://github.com/vanditsramblings/graphql-meter/actions/workflows/ci.yml/badge.svg)](https://github.com/vanditsramblings/graphql-meter/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/vanditsramblings/graphql-meter?color=green)](https://github.com/vanditsramblings/graphql-meter/releases)
@@ -8,77 +12,113 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-0db7ed)](https://github.com/vanditsramblings/graphql-meter/pkgs/container/graphql-meter)
 
-[Quick Start](#getting-started) · [Features](#features) · [Installation](#installation) · [Configuration](#configuration) · [Architecture](#architecture)
+[Quick Start](#quick-start) · [Features](#features) · [Installation](#installation) · [Configuration](#configuration) · [Architecture](#architecture)
 
 ---
 
-## What is GraphQL Meter?
+## GraphQL Performance Testing
 
-GraphQL Meter is a self-hosted platform that transforms your GraphQL schema into fully configured performance tests. Paste a schema, select operations, set traffic distribution, and start load testing -- all from a single web interface. No YAML files, no test scripts to write, no external infrastructure to manage.
+GraphQL Meter turns a GraphQL schema into runnable performance tests, live dashboards, and repeatable comparisons. It is built for teams that want GraphQL performance testing without writing custom scripts or stitching together separate tools.
 
-It ships as a **single container** with everything included: two load-testing engines (Locust and k6), a real-time dashboard, run history, trend analysis, and a built-in GraphQL client for pre-test verification.
+It ships as a **single container** with Locust, k6, a built-in GraphQL client, and run history for regression analysis.
 
-**The problem it solves:** Load testing GraphQL APIs typically requires writing custom scripts, managing test data, configuring authentication, and stitching together multiple tools. GraphQL Meter eliminates this setup cost by auto-discovering operations from your schema and generating everything needed to run, monitor, and compare tests.
+| At a glance | Details |
+|:---|:---|
+| Primary use | GraphQL performance testing and GraphQL load testing |
+| Secondary use | GraphQL API testing, schema discovery, and client verification |
+| Delivery | Single container, no build step, no external orchestration |
+| Engines | Locust and k6, isolated from the FastAPI process |
+| Outputs | Live metrics, run comparisons, and trend views |
 
-<!-- TODO: Add hero screenshot of the dashboard -->
-<!-- ![Dashboard](docs/screenshots/dashboard.png) -->
+## Why We Built It
+
+GraphQL teams usually need to solve the same problems before they can test at all:
+
+- Write custom load scripts for every API shape.
+- Manually manage test data and request variables.
+- Configure authentication, TLS, and client certificates.
+- Switch between multiple tools for schema discovery, execution, and comparison.
+
+GraphQL Meter removes that setup cost by auto-discovering operations from your schema and generating everything needed to run, monitor, and compare tests.
+
+![Dashboard](assets/00-dashboard.png)
 
 ---
 
 ## Features
 
-| Capability | What it does |
-|:---|:---|
-| **Schema-Driven Tests** | Paste schema → auto-discover ops → generate typed test data |
-| **Dual Engine** | Locust (Python) + k6 (Go), subprocess-isolated, switchable per run |
-| **Live Monitoring** | p50/p90/p95/p99 charts updating every 2 seconds |
-| **Run Comparison** | Side-by-side delta with green/red regression highlights |
-| **Environments** | TLS/mTLS, client certs, 6 auth provider types with Fernet encryption |
-| **Built-in GQL Client** | Verify queries before running load tests |
-| **Runtime Config** | Adjust limits, toggle engines, enable debug — no restart needed |
+| Capability | What it covers | Why it matters |
+|:---|:---|:---|
+| **Schema-driven testing** | Discover queries and mutations from a GraphQL schema | Faster test setup with less manual wiring |
+| **Dual load engines** | Locust and k6, switchable per run | Compare engine behavior on the same workload |
+| **Live monitoring** | Throughput, error rate, and p50/p90/p95/p99 latency | See regressions while a test is running |
+| **Run comparison** | Side-by-side delta analysis across runs | Spot performance drift quickly |
+| **Environment profiles** | TLS/mTLS, certs, custom headers, and auth providers | Test realistic GraphQL API environments safely |
+| **Built-in GraphQL client** | Query execution before load testing | Validate schema, auth, and responses first |
+| **Runtime configuration** | Toggle limits and engines without restart | Adjust behavior from the UI when needed |
 
 ### Schema-Driven Test Generation
-Paste a GraphQL schema and GraphQL Meter will parse it (via AST with regex fallback), discover all queries and mutations, and generate type-aware test variables with smart defaults. No hand-authored test scripts required.
 
-<!-- TODO: Screenshot of schema parsing step -->
-<!-- ![Schema Parsing](docs/screenshots/schema-parse.png) -->
+Paste a GraphQL schema and GraphQL Meter will parse it, discover operations, and generate type-aware test variables with smart defaults. No hand-authored test scripts required.
+
+![Schema Parsing](assets/04-schema-parsing.png)
+
+The wizard automatically discovers operations and allows you to configure traffic distribution:
+
+![Operations](assets/05-operations.png)
 
 ### Dual Engine Support
-Choose between **Locust** (Python, greenlet-based) and **k6** (Go binary, scenarios-based) per test run. Both engines are subprocess-isolated from the main server -- they never share the FastAPI process. Compare results across engines to validate findings.
+
+Choose between **Locust** and **k6** per test run. Both engines are subprocess-isolated from the main server, so they never share the FastAPI process. Compare results across engines to validate findings.
 
 ### Real-Time Monitoring
-Watch throughput, response times (p50/p90/p95/p99), error rates, and per-operation breakdowns update live every 2 seconds. Interactive SVG charts with multi-series support render directly in the browser with no chart library dependency.
 
-<!-- TODO: Screenshot of live test monitoring -->
-<!-- ![Live Monitoring](docs/screenshots/live-test.png) -->
+Watch throughput, response times, error rates, and per-operation breakdowns update live every 2 seconds. Interactive SVG charts render directly in the browser with no chart library dependency.
+
+![Live Monitoring](assets/07-1-livemonitoring.png)
+
+![Live Monitoring](assets/07-2-livemonitoring.png)
 
 ### Test Configuration Wizard
-A 3-step wizard guides test setup: define global parameters, select operations with TPS percentage distribution (must sum to 100%), and review before starting. Saved configurations are reusable across runs.
+
+A 3-step wizard guides test setup: define global parameters, select operations with TPS percentage distribution, and review before starting. Saved configurations are reusable across runs.
 
 ### Run Comparison and Trend Analysis
-Compare any two runs side-by-side with delta highlighting (green = improved, red = regressed). View latency and throughput trends over the last N runs for any test configuration to catch regressions early.
 
-<!-- TODO: Screenshot of comparison view -->
-<!-- ![Compare](docs/screenshots/compare.png) -->
+Compare any two runs side-by-side with delta highlighting. View per-operation deltas and overall metrics:
+
+![Compare Runs](assets/09-comparison-view-data.png)
+
+View latency and throughput trends over the last N runs for any test configuration to catch regressions early:
+
+![Performance Trends](assets/10-trends-analysis.png)
 
 ### Environment Profiles
-Define multiple target environments with distinct base URLs, TLS/mTLS settings, client certificates (PEM, PFX, cert+key), custom headers, and linked authentication providers. Switch between dev, staging, and production targets without reconfiguring tests.
+
+Define multiple target environments with distinct base URLs, TLS/mTLS settings, client certificates, custom headers, and linked authentication providers. Switch between dev, staging, and production targets without reconfiguring tests:
+
+![Environment Profiles](assets/11-environment-profiles.png)
 
 ### Encrypted Authentication
-Six auth provider types: Bearer Token, Basic Auth, API Key, OAuth2 Client Credentials, OAuth2 Password, and Custom JWT. All secrets encrypted at rest with Fernet AES. Thread-safe token caching with automatic refresh for OAuth2 flows.
+
+Six auth provider types: Bearer Token, Basic Auth, API Key, OAuth2 Client Credentials, OAuth2 Password, and Custom JWT. All secrets are encrypted at rest with Fernet. Token caching is thread-safe and automatically refreshes OAuth2 flows.
 
 ### Built-In GraphQL Client
-Verify queries against your target API before running load tests. Split-pane editor with variables/headers panels, environment and auth provider resolution, saved requests, and import from test configurations.
+
+Verify queries against your target API before running load tests. The split-pane editor supports variables, headers, environment resolution, auth provider resolution, saved requests, and import from test configurations:
+
+![GraphQL Client](assets/12-graphql-client.png)
 
 ### Runtime Configuration
-Adjust concurrency limits, enable/disable engines, toggle debug mode, and tune polling intervals from the Settings page without restarting the server. All changes take effect immediately for the current session.
 
-### Dark Professional UI
-Grafana/k6-inspired dark theme with CSS custom properties. No build step -- Preact + HTM served as vendored ES modules. Every page handles loading, empty, and error states.
+Adjust concurrency limits, enable or disable engines, toggle debug mode, and tune polling intervals from the Settings page without restarting the server. Changes take effect immediately for the current session:
+
+![Runtime Configuration](assets/13-runtime-configuration.png)
+
 
 ---
 
-## Getting Started
+## Quick Start
 
 The fastest path to a running instance:
 
@@ -106,7 +146,6 @@ docker run -p 8899:8899 ghcr.io/vanditsramblings/graphql-meter:latest
 
 # Run with custom configuration
 docker run -p 8899:8899 \
-  -e JWT_SECRET=your-secret-key-here \
   -e MAX_CONCURRENT_RUNS=5 \
   -e ENABLE_K6=true \
   -e ENABLE_LOCUST=true \
@@ -177,7 +216,6 @@ helm install graphql-meter ./helm/graphql-meter
 
 # Install with custom values
 helm install graphql-meter ./helm/graphql-meter \
-  --set secret.jwtSecret=my-production-secret \
   --set persistence.size=5Gi \
   --set resources.limits.memory=2Gi
 
@@ -260,8 +298,6 @@ All settings are controlled via environment variables or a `.env` file. Copy `.e
 
 | Variable | Default | Description |
 |:---|:---|:---|
-| `JWT_SECRET` | (change me) | Secret key for JWT HS256 signing. **Must be changed in production.** |
-| `JWT_EXPIRY_HOURS` | `24` | Token expiration time |
 | `ENCRYPTION_KEY` | (auto) | Fernet key for encrypting auth provider secrets. Auto-derived from `JWT_SECRET` if empty. |
 
 ### Load Testing
@@ -301,14 +337,13 @@ All settings are controlled via environment variables or a `.env` file. Copy `.e
 
 **Environment variables** (highest priority):
 ```bash
-export JWT_SECRET=my-production-secret
 export MAX_CONCURRENT_RUNS=5
 graphql-meter
 ```
 
 **Docker environment**:
 ```bash
-docker run -e JWT_SECRET=my-secret -e ENABLE_K6=false -p 8899:8899 ghcr.io/vanditsramblings/graphql-meter
+docker run -e ENABLE_K6=false -p 8899:8899 ghcr.io/vanditsramblings/graphql-meter
 ```
 
 **.env file** (loaded automatically from working directory):

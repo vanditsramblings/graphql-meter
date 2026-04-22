@@ -40,12 +40,6 @@ jobs:
       - name: Export OpenAPI spec
         run: python scripts/export_openapi.py
 
-      #- name: Set up Helm
-      #  uses: azure/setup-helm@v4
-
-      #- name: Lint Helm chart
-      #  run: helm lint ./helm/graphql-meter --set secret.jwtSecret=ci-chart-secret-1234567890
-
   test:
     runs-on: ubuntu-latest
     needs: quality
@@ -121,21 +115,80 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install dependencies (for lock generation)
+      - name: Install dependencies and generate lockfile
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-
-      - name: Generate pip freeze lock
-        run: pip freeze > requirements.lock
+          pip freeze > requirements.txt
 
       - name: Run Trivy vulnerability scan (filesystem)
         uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: fs
           scan-ref: .
-          format: table
-          exit-code: "1"
-          severity: CRITICAL,HIGH
+          format: json
+          output: trivy-results.json
+          exit-code: "0" # Always return 0 here, let Python handle the failure logic
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL # Tell Trivy to report ALL severities
+          vuln-type: library
           ignore-unfixed: true
           scanners: vuln
+        env:
+          TRIVY_DETECTION_PRIORITY: comprehensive
+
+      - name: Parse Results and Enforce Policy
+        run: |
+          python - <<'PY'
+          import json, sys
+          from collections import Counter
+          
+          with open("trivy-results.json", encoding="utf-8") as f:
+              results = json.load(f).get("Results") or []
+              
+          scanned = [i for i in results if i.get("Target") not in ("", "-") and i.get("Type") not in ("", "-")]
+          if not scanned: 
+              print("ERROR: Trivy scanned zero supported targets.")
+              sys.exit(1)
+              
+          severity_counts = Counter({'UNKNOWN': 0, 'LOW': 0, 'MEDIUM': 0, 'HIGH': 0, 'CRITICAL': 0})
+          high_crit_count = 0
+          
+          print("========================================")
+          print("      DETAILED VULNERABILITY LOG      ")
+          print("========================================")
+          
+          for i in results:
+              target = i.get("Target", "Unknown Target")
+              vulns = i.get("Vulnerabilities") or []
+              
+              if vulns:
+                  print(f"\nTarget: {target}")
+                  for v in vulns:
+                      pkg = v.get("PkgName", "Unknown")
+                      sev = v.get("Severity", "UNKNOWN")
+                      vid = v.get("VulnerabilityID", "UNKNOWN")
+                      title = v.get("Title", "No title provided")
+                      
+                      # Increment counters
+                      severity_counts[sev] += 1
+                      if sev in {"HIGH", "CRITICAL"}:
+                          high_crit_count += 1
+                          
+                      print(f"  [{sev.ljust(8)}] {pkg} ({vid}): {title}")
+          
+          print("\n========================================")
+          print("        TOTAL DETECTION SUMMARY         ")
+          print("========================================")
+          for sev in ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN']:
+              print(f"{sev.ljust(10)}: {severity_counts[sev]}")
+          
+          print("----------------------------------------")
+          print(f"Total Vulns : {sum(severity_counts.values())}")
+          print("========================================\n")
+              
+          if high_crit_count > 0: 
+              print(f"❌ ERROR: Pipeline failing due to {high_crit_count} HIGH/CRITICAL vulnerabilities.")
+              sys.exit(1)
+              
+          print(f"✅ Success: No HIGH or CRITICAL vulnerabilities found. (Total scanned targets: {len(scanned)})")
+          PY

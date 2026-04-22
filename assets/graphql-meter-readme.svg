@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="290 90 220 220">
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450">
   <defs>
     <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" style="stop-color:#1a3a5f;stop-opacity:1"/>
@@ -25,4 +25,5 @@
     <circle cx="400" cy="205" r="12"/> 
   </g>
 
+  <text x="400" y="365" font-family="Arial, sans-serif" font-weight="bold" font-size="52" text-anchor="middle" fill="#0a2540">graphql-meter</text>
 </svg>
