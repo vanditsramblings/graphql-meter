@@ -16,7 +16,6 @@ build/
 backend/data/runs
 test-data/
 tests/
-*.md
 *.bak
 *.log
 Dockerfile
